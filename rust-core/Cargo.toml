@@ -1,0 +1,24 @@
+[package]
+name = "pygmy-rust-core"
+version = "0.1.0"
+edition = "2021"
+authors = ["Noir <135784234+Numairee@users.noreply.github.com>"]
+description = "High-performance, memory-safe Rust core for Pygmy Android slip parser and security engine"
+
+[lib]
+name = "pygmy_core"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+regex = "1.10"
+sha2 = "0.10"
+jni = { version = "0.21", default-features = false }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

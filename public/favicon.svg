@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stopColor="#f59e0b" />
+      <stop offset="100%" stopColor="#d97706" />
+    </linearGradient>
+  </defs>
+  <rect width="100" height="100" rx="28" fill="url(#bg)" />
+  <!-- Cute Pygmy Goat Head -->
+  <path d="M 32 30 C 26 12 34 5 42 14 Z" fill="#aa8c2c" />
+  <path d="M 68 30 C 74 12 66 5 58 14 Z" fill="#aa8c2c" />
+  <ellipse cx="23" cy="45" rx="14" ry="7" transform="rotate(-25 23 45)" fill="#ffffff" />
+  <ellipse cx="23" cy="45" rx="9" ry="4" transform="rotate(-25 23 45)" fill="#ffd1dc" />
+  <ellipse cx="77" cy="45" rx="14" ry="7" transform="rotate(25 77 45)" fill="#ffffff" />
+  <ellipse cx="77" cy="45" rx="9" ry="4" transform="rotate(25 77 45)" fill="#ffd1dc" />
+  <ellipse cx="50" cy="52" rx="27" ry="24" fill="#ffffff" />
+  <circle cx="34" cy="58" r="7" fill="#ffb4a2" opacity="0.6" />
+  <circle cx="66" cy="58" r="7" fill="#ffb4a2" opacity="0.6" />
+  <ellipse cx="50" cy="63" rx="11" ry="8" fill="#fdfbf7" />
+  <ellipse cx="47" cy="61" rx="1.8" ry="1" fill="#495057" />
+  <ellipse cx="53" cy="61" rx="1.8" ry="1" fill="#495057" />
+  <path d="M 46 66 Q 50 70 54 66" fill="none" stroke="#495057" stroke-width="1.5" stroke-linecap="round" />
+  <circle cx="40" cy="48" r="3.5" fill="#212529" />
+  <circle cx="41" cy="46.5" r="1.4" fill="#ffffff" />
+  <circle cx="60" cy="48" r="3.5" fill="#212529" />
+  <circle cx="61" cy="46.5" r="1.4" fill="#ffffff" />
+</svg>

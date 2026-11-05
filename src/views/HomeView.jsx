@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import SummaryCards from '../components/SummaryCards';
 import GoatWidget from '../components/GoatWidget';
 import TransactionItem from '../components/TransactionItem';
-import { Camera, Plus, Sparkles, Filter, ChevronRight, Receipt, Zap, Loader2 } from 'lucide-react';
+import { Camera, Plus, Sparkles, Filter, ChevronRight, Receipt, Zap, Loader2, Calendar } from 'lucide-react';
 import { sound } from '../utils/sound';
 
 export default function HomeView({
@@ -16,7 +16,8 @@ export default function HomeView({
   onOpenManualModal,
   onOpenDetailModal,
   onFeedGoat,
-  onOpenGoatRoom
+  onOpenGoatRoom,
+  onResetMonth
 }) {
   const [filterPeriod, setFilterPeriod] = useState('all');
 
@@ -76,6 +77,25 @@ export default function HomeView({
         onFeedGoat={onFeedGoat}
         onOpenGoatRoom={onOpenGoatRoom}
       />
+
+      {/* Warning banner if viewing different month */}
+      {!isCurrentMonthNow && (
+        <div
+          onClick={() => {
+            sound.playPop();
+            if (onResetMonth) onResetMonth();
+          }}
+          className="p-3 rounded-2xl bg-amber-500 text-white font-bold text-xs flex items-center justify-between shadow-xs cursor-pointer active:scale-98 transition-all hover:bg-amber-600"
+        >
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 shrink-0" />
+            <span>กำลังดูยอดของเดือนอื่น ({curMonth}/{curYear + 543})</span>
+          </div>
+          <span className="bg-white/20 px-2.5 py-1 rounded-xl text-[11px] font-extrabold flex items-center gap-1">
+            กลับเดือนปัจจุบัน ↩
+          </span>
+        </div>
+      )}
 
       {/* Monthly Summary Cards */}
       <SummaryCards

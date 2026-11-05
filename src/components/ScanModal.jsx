@@ -112,6 +112,23 @@ export default function ScanModal({
     });
   };
 
+  const handleUpdateItemAmount = (idx, newAmt) => {
+    const val = parseFloat(newAmt);
+    setExtractedItems(prev => {
+      const copy = [...prev];
+      copy[idx] = { ...copy[idx], amount: isNaN(val) ? 0 : val };
+      return copy;
+    });
+  };
+
+  const handleUpdateItemPayee = (idx, newPayee) => {
+    setExtractedItems(prev => {
+      const copy = [...prev];
+      copy[idx] = { ...copy[idx], payee: newPayee };
+      return copy;
+    });
+  };
+
   const handleRemoveItem = (idx) => {
     sound.playPop();
     setExtractedItems(prev => prev.filter((_, i) => i !== idx));
@@ -337,18 +354,30 @@ export default function ScanModal({
                           : 'bg-neutral-50 border-neutral-200'
                       }`}
                     >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div
-                          className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-[11px] shrink-0 text-white shadow-2xs"
-                          style={{ backgroundColor: b.color }}
-                        >
-                          {b.iconText}
-                        </div>
-                        <div className="min-w-0">
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                        {item.slipThumbnail ? (
+                          <img
+                            src={item.slipThumbnail}
+                            alt="Slip"
+                            className="w-10 h-12 object-cover rounded-xl border border-neutral-300 shadow-2xs shrink-0"
+                          />
+                        ) : (
+                          <div
+                            className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-[11px] shrink-0 text-white shadow-2xs"
+                            style={{ backgroundColor: b.color }}
+                          >
+                            {b.iconText}
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5">
-                            <h5 className="font-bold text-xs text-neutral-900 truncate">
-                              {item.payee}
-                            </h5>
+                            <input
+                              type="text"
+                              value={item.payee}
+                              onChange={(e) => handleUpdateItemPayee(idx, e.target.value)}
+                              className="font-bold text-xs text-neutral-900 bg-transparent border-b border-transparent hover:border-neutral-300 focus:border-amber-500 focus:outline-hidden px-0.5 w-full truncate"
+                              title="แตะเพื่อแก้ไขชื่อร้านค้า / ผู้รับเงิน"
+                            />
                             {item.isDuplicate ? (
                               <span className="shrink-0 text-[9px] font-bold px-1.5 py-0.2 rounded-md bg-amber-200 text-amber-900 flex items-center gap-0.5">
                                 ⚠️ อ่านแล้ว
@@ -381,14 +410,22 @@ export default function ScanModal({
 
                       <div className="flex items-center gap-2 shrink-0">
                         <div className="text-right">
-                          <div className="font-mono font-bold text-xs text-neutral-900">
-                            -฿{formatBaht(item.amount)}
+                          <div className="flex items-center font-mono font-bold text-xs text-neutral-900">
+                            <span className="text-neutral-400 mr-0.5">-฿</span>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={item.amount}
+                              onChange={(e) => handleUpdateItemAmount(idx, e.target.value)}
+                              className="w-20 font-mono font-bold text-xs text-right bg-white border border-neutral-200 hover:border-neutral-400 focus:border-amber-500 rounded-lg px-1.5 py-1 focus:outline-hidden shadow-2xs"
+                              title="แตะเพื่อแก้ไขจำนวนเงิน"
+                            />
                           </div>
                         </div>
                         <button
                           type="button"
                           onClick={() => handleRemoveItem(idx)}
-                          className="w-6 h-6 rounded-full hover:bg-neutral-200 flex items-center justify-center text-neutral-400 hover:text-neutral-700"
+                          className="w-6 h-6 rounded-full hover:bg-neutral-200 flex items-center justify-center text-neutral-400 hover:text-neutral-700 transition-colors"
                         >
                           <X className="w-3.5 h-3.5" />
                         </button>

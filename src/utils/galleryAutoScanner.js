@@ -3,6 +3,7 @@
 
 import { registerPlugin } from '@capacitor/core';
 import { parseSlipImage, SAMPLE_TEST_SLIPS } from './slipParser';
+import { matchCategory } from '../data/defaultCategories';
 
 const GalleryScanner = registerPlugin('GalleryScanner');
 
@@ -32,46 +33,76 @@ export const AutoScanner = {
   },
 
   /**
-   * Native Android: Scans recent gallery photos directly via MediaStore ContentResolver
+   * Native Android: Scans recent gallery photos directly via MediaStore & Google ML Kit on-device
    */
   async scanNativeGallery(existingTransactions = [], categories = [], merchantRules = {}) {
     try {
-      // Look back for photos from the last 14 days
-      const twoWeeksAgoSec = Math.floor((Date.now() - 14 * 86400 * 1000) / 1000);
+      // Look back 60 days to catch all recent slips
+      const sixtyDaysAgoSec = Math.floor((Date.now() - 60 * 86400 * 1000) / 1000);
       const res = await GalleryScanner.scanRecentSlips({
-        limit: 40,
-        since: twoWeeksAgoSec
+        limit: 50,
+        since: sixtyDaysAgoSec
       });
 
-      if (!res || !res.photos || res.photos.length === 0) {
+      if (!res) {
         return { success: true, newSlips: [], duplicatesCount: 0, totalScanned: 0 };
       }
 
-      const photos = res.photos;
-      const newSlips = [];
-      let duplicatesCount = 0;
+      // 1. If Java ML Kit returned parsed slips directly (High Performance)
+      if (res.slips && Array.isArray(res.slips)) {
+        const newSlips = [];
+        let duplicatesCount = 0;
 
-      for (const p of photos) {
-        // Convert base64 dataUrl to blob/file for parser
-        const fileObj = await this.dataUrlToFile(p.dataUrl, p.name || 'slip.jpg');
-        const parseRes = await parseSlipImage(fileObj, merchantRules, categories);
+        for (const slip of res.slips) {
+          const categorizedSlip = {
+            ...slip,
+            categoryId: matchCategory(slip.payee, '', merchantRules, categories) || slip.categoryId || 'food'
+          };
 
-        if (parseRes.success && parseRes.data) {
-          const slip = parseRes.data;
-          if (this.isDuplicate(slip, existingTransactions)) {
+          if (this.isDuplicate(categorizedSlip, existingTransactions)) {
             duplicatesCount++;
           } else {
-            newSlips.push(slip);
+            newSlips.push(categorizedSlip);
           }
         }
+
+        return {
+          success: true,
+          newSlips,
+          duplicatesCount,
+          totalScanned: res.count || res.slips.length
+        };
       }
 
-      return {
-        success: true,
-        newSlips,
-        duplicatesCount,
-        totalScanned: photos.length
-      };
+      // 2. Fallback if photos were returned as raw images
+      if (res.photos && res.photos.length > 0) {
+        const photos = res.photos;
+        const newSlips = [];
+        let duplicatesCount = 0;
+
+        for (const p of photos) {
+          const fileObj = await this.dataUrlToFile(p.dataUrl, p.name || 'slip.jpg');
+          const parseRes = await parseSlipImage(fileObj, merchantRules, categories);
+
+          if (parseRes.success && parseRes.data) {
+            const slip = parseRes.data;
+            if (this.isDuplicate(slip, existingTransactions)) {
+              duplicatesCount++;
+            } else {
+              newSlips.push(slip);
+            }
+          }
+        }
+
+        return {
+          success: true,
+          newSlips,
+          duplicatesCount,
+          totalScanned: photos.length
+        };
+      }
+
+      return { success: true, newSlips: [], duplicatesCount: 0, totalScanned: 0 };
     } catch (err) {
       console.warn('Native gallery scan error:', err);
       return { success: false, error: err.message };

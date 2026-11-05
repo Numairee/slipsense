@@ -224,6 +224,7 @@ export default function App() {
             onOpenDetailModal={(tx) => setActiveDetailTx(tx)}
             onFeedGoat={handleFeedGoat}
             onOpenGoatRoom={() => setActiveTab('goat')}
+            onResetMonth={() => setCurrentDate(new Date())}
           />
         )}
 

@@ -239,7 +239,7 @@ export default function SettingsView({
       {/* About Pygmy & Credits */}
       <div className="text-center py-4 text-xs text-neutral-400 space-y-1">
         <p className="font-semibold text-neutral-600">
-          Pygmy: No-Track Tracker (Android Edition)
+          Pygmy: No-Track Tracker v1.0.2 (Android Edition)
         </p>
         <p className="text-[11px]">
           แนวคิดจากแอป iOS <b>"Pygmy: จดรายจ่ายแบบไม่จด"</b> โดย Peerasak Unsakon

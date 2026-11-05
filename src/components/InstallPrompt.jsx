@@ -18,7 +18,7 @@ export default function InstallPrompt() {
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
             <h5 className="font-extrabold text-xs text-neutral-900 leading-tight">
-              ติดตั้งแอปแท้ Pygmy (.APK)
+              ติดตั้งแอปแท้ Pygmy v1.0.2 (.APK)
             </h5>
             <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-amber-500 text-white uppercase tracking-wider">
               iQOO 15

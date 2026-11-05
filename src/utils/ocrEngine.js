@@ -76,7 +76,45 @@ export async function runSlipOCR(canvas) {
 /**
  * Parse raw text into structured Thai slip data
  */
-export function parseTextToSlipFields(text = '') {
+/**
+ * Tesseract often emits Thai with a space between every glyph ("เล ข ท ี ร า ย ก า ร").
+ * Collapse whitespace between Thai characters (and around dots inside Thai abbreviations
+ * such as "พ . ย .") so keyword regexes can match.
+ */
+export function normalizeThaiOcr(text = '') {
+  const TH = '\u0E00-\u0E7F';
+  let t = text.replace(/\r/g, '');
+  let prev;
+  do {
+    prev = t;
+    t = t.replace(new RegExp(`([${TH}])[ \\t]+([${TH}])`, 'g'), '$1$2');
+    t = t.replace(new RegExp(`([${TH}])[ \\t]*\\.[ \\t]*(?=[${TH}\\s\\d]|$)`, 'gm'), '$1.');
+  } while (t !== prev);
+  return t;
+}
+
+const THAI_MARKS = '[\\u0E31\\u0E34-\\u0E3A\\u0E47-\\u0E4E\\s]*';
+// Order matters: more specific abbreviations first (มี.ค./มิ.ย. before ม.ค.)
+const THAI_MONTHS = [
+  ['มี.ค.', '03'], ['มิ.ย.', '06'], ['ม.ค.', '01'], ['ก.พ.', '02'], ['เม.ย.', '04'],
+  ['พ.ค.', '05'], ['ก.ค.', '07'], ['ส.ค.', '08'], ['ก.ย.', '09'], ['ต.ค.', '10'],
+  ['พ.ย.', '11'], ['ธ.ค.', '12']
+].map(([abbr, mm]) => {
+  // Tolerate stray OCR vowel marks and missing dots between letters
+  const body = [...abbr.replace(/\./g, '')].map(ch => ch).join(`${THAI_MARKS}\\.?${THAI_MARKS}`);
+  return { mm, re: new RegExp(`(\\d{1,2})\\s*${body}${THAI_MARKS}\\.?\\s*(\\d{2,4})`) };
+});
+
+function normalizeYear(y) {
+  if (y < 100) y += y >= 40 ? 2500 : 2000; // 2-digit years on Thai slips are Buddhist Era (69 = 2569)
+  if (y > 2400) y -= 543;
+  return y;
+}
+
+const MASKED_ACCOUNT_RE = /[xX%๐\d]{2,}\s*-[xX%๐\d\s-]*\d{3,}/;
+
+export function parseTextToSlipFields(rawText = '') {
+  const text = normalizeThaiOcr(rawText);
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
 
   // 1. Extract Amount
@@ -126,34 +164,27 @@ export function parseTextToSlipFields(text = '') {
 
   // 3. Extract Date
   let date = null;
-  const thaiMonths = {
-    'ม.ค.': '01', 'ก.พ.': '02', 'มี.ค.': '03', 'เม.ย.': '04',
-    'พ.ค.': '05', 'มิ.ย.': '06', 'ก.ค.': '07', 'ส.ค.': '08',
-    'ก.ย.': '09', 'ต.ค.': '10', 'พ.ย.': '11', 'ธ.ค.': '12'
-  };
-
-  const dateThaiRe = /(\d{1,2})\s*(ม\.ค\.|ก\.พ\.|มี\.ค\.|เม\.ย\.|พ\.ค\.|มิ\.ย\.|ก\.ค\.|ส\.ค\.|ก\.ย\.|ต\.ค\.|พ\.ย\.|ธ\.ค\.)\s*(\d{2,4})/;
   const dateSlashRe = /(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/;
 
   for (const line of lines) {
-    const thaiMatch = line.match(dateThaiRe);
-    if (thaiMatch) {
-      const d = thaiMatch[1].padStart(2, '0');
-      const m = thaiMonths[thaiMatch[2]] || '11';
-      let y = parseInt(thaiMatch[3], 10);
-      if (y > 2500) y -= 543;
-      else if (y < 100) y += 2000;
-      date = `${y}-${m}-${d}`;
-      break;
+    let found = false;
+    for (const { mm, re } of THAI_MONTHS) {
+      const tm = line.match(re);
+      if (tm) {
+        const d = tm[1].padStart(2, '0');
+        const y = normalizeYear(parseInt(tm[2], 10));
+        date = `${y}-${mm}-${d}`;
+        found = true;
+        break;
+      }
     }
+    if (found) break;
 
     const slashMatch = line.match(dateSlashRe);
-    if (slashMatch) {
+    if (slashMatch && !MASKED_ACCOUNT_RE.test(line)) {
       const d = slashMatch[1].padStart(2, '0');
       const m = slashMatch[2].padStart(2, '0');
-      let y = parseInt(slashMatch[3], 10);
-      if (y > 2500) y -= 543;
-      else if (y < 100) y += 2000;
+      const y = normalizeYear(parseInt(slashMatch[3], 10));
       date = `${y}-${m}-${d}`;
       break;
     }
@@ -161,7 +192,7 @@ export function parseTextToSlipFields(text = '') {
 
   // 4. Extract Payee
   let payee = null;
-  const payeeRe = /(?:ไปยัง|ผู้รับเงิน|To|ชื่อผู้รับ|โอนให้|ร้านค้า)[:\s]*([^\n\r]+)/i;
+  const payeeRe = /(?:ไปยัง|ผู้รับเงิน|ชื่อผู้รับ|โอนให้|^To\b)[:\s]*([^\n\r]+)/i;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const m = line.match(payeeRe);
@@ -169,10 +200,19 @@ export function parseTextToSlipFields(text = '') {
       payee = m[1].trim();
       break;
     }
-    if ((line.includes('ไปยัง') || line.includes('ผู้รับเงิน') || line.toLowerCase().startsWith('to')) && i + 1 < lines.length) {
-      const next = lines[i + 1].trim();
-      if (next && !next.includes('จำนวน') && !next.includes('เลขที่') && !next.includes('00')) {
-        payee = next;
+    if (/^(ไปยัง|ผู้รับเงิน|to:?)$/i.test(line) && i + 1 < lines.length) {
+      payee = lines[i + 1].trim();
+      break;
+    }
+  }
+  // K PLUS style (no label): payee is the first name line after the sender's masked account
+  if (!payee) {
+    const firstAcc = lines.findIndex(l => MASKED_ACCOUNT_RE.test(l));
+    if (firstAcc >= 0) {
+      for (let i = firstAcc + 1; i < lines.length; i++) {
+        const l = lines[i];
+        if (l.length < 3 || MASKED_ACCOUNT_RE.test(l) || /จำนวน|เลขที|รหัส|ค่าธรรมเนียม|อ้างอิง/.test(l)) continue;
+        payee = l;
         break;
       }
     }
@@ -189,11 +229,14 @@ export function parseTextToSlipFields(text = '') {
     }
   }
 
-  // 6. Extract Reference
+  // 6. Extract Reference (code may be on the same line as the label or the next line)
   let refCode = null;
-  const refRe = /(?:รหัสอ้างอิง|เลขที่รายการ|Ref|Transaction Ref)[:\s]*([A-Za-z0-9]{10,35})/i;
-  for (const line of lines) {
-    const m = line.match(refRe);
+  const refLabelRe = /(?:รหัสอ้างอิง|เลขที่?รายการ|เลขที่?อ้างอิง|Ref(?:erence)?|Transaction ID)/i;
+  const codeRe = /([A-Za-z0-9]{10,35})/;
+  for (let i = 0; i < lines.length; i++) {
+    if (!refLabelRe.test(lines[i])) continue;
+    const after = lines[i].split(/[:：]/).slice(1).join(':');
+    const m = (after || lines[i].replace(refLabelRe, '')).match(codeRe) || (lines[i + 1] || '').match(codeRe);
     if (m) {
       refCode = m[1];
       break;

@@ -91,13 +91,12 @@ export const Storage = {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
       if (!raw) {
-        // Initialize with sample data for immediate visual delight
-        localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(SAMPLE_INITIAL_TRANSACTIONS));
-        return SAMPLE_INITIAL_TRANSACTIONS;
+        localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify([]));
+        return [];
       }
       return JSON.parse(raw);
     } catch {
-      return SAMPLE_INITIAL_TRANSACTIONS;
+      return [];
     }
   },
 

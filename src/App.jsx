@@ -79,6 +79,11 @@ export default function App() {
 
       // Auto dismiss toast after 5s
       setTimeout(() => setScanToast(null), 5000);
+    } else if (res && res.success === false && !isSilentOnStartup) {
+      setScanToast({
+        message: `ไม่สามารถเข้าถึงอัลบั้มภาพอัตโนมัติได้ (${res.error || 'กรุณาอนุญาตสิทธิ์รูปภาพ'})`
+      });
+      setTimeout(() => setScanToast(null), 5000);
     } else if (!isSilentOnStartup) {
       setScanToast({
         message: 'ตรวจเช็กอัลบั้มแล้ว ข้อมูลสลิปเป็นปัจจุบัน ไม่มีสลิปใหม่เพิ่มเติม'

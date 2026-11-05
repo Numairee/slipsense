@@ -7,6 +7,7 @@ import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.provider.MediaStore;
@@ -77,7 +78,10 @@ public class GalleryScannerPlugin extends Plugin {
     }
 
     private boolean hasGalleryPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        if (Build.VERSION.SDK_INT >= 34) {
+            return getContext().checkSelfPermission(Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED
+                || getContext().checkSelfPermission(Manifest.permission.READ_MEDIA_VISUAL_USER_SELECTED) == PackageManager.PERMISSION_GRANTED;
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             return getContext().checkSelfPermission(Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED;
         } else {
             return getContext().checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
@@ -111,7 +115,6 @@ public class GalleryScannerPlugin extends Plugin {
         new Thread(() -> {
             try {
                 int limit = call.getInt("limit", 50);
-                long sinceSeconds = call.getLong("since", 0L);
 
                 ContentResolver resolver = getContext().getContentResolver();
                 Uri collection;
@@ -128,24 +131,20 @@ public class GalleryScannerPlugin extends Plugin {
                     MediaStore.Images.Media.MIME_TYPE
                 };
 
-                String selection = null;
-                String[] selectionArgs = null;
-                if (sinceSeconds > 0) {
-                    selection = MediaStore.Images.Media.DATE_ADDED + " >= ?";
-                    selectionArgs = new String[] { String.valueOf(sinceSeconds) };
-                }
+                // IMPORTANT: Android 11+ (API 30+) forbids "LIMIT" inside sortOrder in ContentResolver.query!
+                String sortOrder = MediaStore.Images.Media.DATE_ADDED + " DESC";
 
-                String sortOrder = MediaStore.Images.Media.DATE_ADDED + " DESC LIMIT " + limit;
-
-                Cursor cursor = resolver.query(collection, projection, selection, selectionArgs, sortOrder);
+                Cursor cursor = resolver.query(collection, projection, null, null, sortOrder);
                 JSArray parsedSlips = new JSArray();
+                int scannedCount = 0;
 
                 if (cursor != null) {
                     int idCol = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID);
                     int nameCol = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DISPLAY_NAME);
                     int dateCol = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_ADDED);
 
-                    while (cursor.moveToNext()) {
+                    while (cursor.moveToNext() && scannedCount < limit) {
+                        scannedCount++;
                         long id = cursor.getLong(idCol);
                         String name = cursor.getString(nameCol);
                         long dateAdded = cursor.getLong(dateCol);
@@ -164,10 +163,12 @@ public class GalleryScannerPlugin extends Plugin {
                     cursor.close();
                 }
 
+                Log.d(TAG, "Scanned " + scannedCount + " photos, found " + parsedSlips.length() + " slips");
+
                 JSObject res = new JSObject();
                 res.put("success", true);
                 res.put("slips", parsedSlips);
-                res.put("count", parsedSlips.length());
+                res.put("count", scannedCount);
                 call.resolve(res);
 
             } catch (Exception e) {
@@ -180,7 +181,6 @@ public class GalleryScannerPlugin extends Plugin {
     private JSObject processImageUri(ContentResolver resolver, Uri uri, long id, String fileName, long dateAddedSec) {
         Bitmap bmp = null;
         try {
-            // Check dimensions first
             BitmapFactory.Options options = new BitmapFactory.Options();
             options.inJustDecodeBounds = true;
             try (InputStream is = resolver.openInputStream(uri)) {
@@ -200,13 +200,15 @@ public class GalleryScannerPlugin extends Plugin {
 
             BitmapFactory.Options decodeOpts = new BitmapFactory.Options();
             decodeOpts.inSampleSize = inSampleSize;
-            decodeOpts.inPreferredConfig = Bitmap.Config.RGB_565; // memory efficient
+            decodeOpts.inPreferredConfig = Bitmap.Config.ARGB_8888;
 
             try (InputStream is = resolver.openInputStream(uri)) {
                 bmp = BitmapFactory.decodeStream(is, null, decodeOpts);
             }
 
             if (bmp == null) return null;
+
+            String headerColorBank = analyzeHeaderBankColor(bmp);
 
             // Run ML Kit Text and Barcode
             InputImage inputImage = InputImage.fromBitmap(bmp, 0);
@@ -232,6 +234,8 @@ public class GalleryScannerPlugin extends Plugin {
                 } catch (Exception ignored) {}
             }
 
+            Log.d(TAG, "Photo id=" + id + " name=" + fileName + " colorBank=" + headerColorBank + " qrLen=" + qrPayload.length() + " ocr=" + ocrText.replace("\n", " | "));
+
             // Identify if this is a Thai bank slip
             boolean hasSlipKeywords = isSlip(ocrText, qrPayload, fileName);
             if (!hasSlipKeywords) {
@@ -239,7 +243,7 @@ public class GalleryScannerPlugin extends Plugin {
             }
 
             // Parse financial fields
-            ParsedSlip parsed = parseSlipData(ocrText, qrPayload, fileName, dateAddedSec);
+            ParsedSlip parsed = parseSlipData(ocrText, qrPayload, fileName, dateAddedSec, headerColorBank);
             if (parsed.amount <= 0) {
                 return null; // Ignore non-payment images
             }
@@ -273,6 +277,7 @@ public class GalleryScannerPlugin extends Plugin {
             return slipObj;
 
         } catch (Exception e) {
+            Log.w(TAG, "processImageUri error: " + e.getMessage());
             return null;
         } finally {
             if (bmp != null && !bmp.isRecycled()) {
@@ -281,26 +286,73 @@ public class GalleryScannerPlugin extends Plugin {
         }
     }
 
+    private String analyzeHeaderBankColor(Bitmap bmp) {
+        try {
+            int w = bmp.getWidth();
+            int h = Math.max(5, (int) (bmp.getHeight() * 0.15));
+            long rSum = 0, gSum = 0, bSum = 0, count = 0;
+            int step = Math.max(2, w / 25);
+            for (int y = 0; y < h; y += step) {
+                for (int x = 0; x < w; x += step) {
+                    int pixel = bmp.getPixel(x, y);
+                    int r = Color.red(pixel);
+                    int g = Color.green(pixel);
+                    int b = Color.blue(pixel);
+                    int bright = (r + g + b) / 3;
+                    if (bright > 30 && bright < 240) {
+                        rSum += r;
+                        gSum += g;
+                        bSum += b;
+                        count++;
+                    }
+                }
+            }
+            if (count == 0) return null;
+            double avgR = (double) rSum / count;
+            double avgG = (double) gSum / count;
+            double avgB = (double) bSum / count;
+
+            if (avgG > avgR * 1.25 && avgG > avgB * 1.25 && avgG > 70) return "KBANK";
+            if (avgB > avgG * 1.3 && avgR > avgG * 1.1 && avgB > 60) return "SCB";
+            if (avgR > 140 && avgG > 120 && avgB < 100) return "BAY";
+            if (avgB > avgR * 1.4 && avgG > avgR * 1.1 && avgB > 110) return "KTB";
+            if (avgR > 180 && avgG > 80 && avgG < 150 && avgB < 70) return "TRUEMONEY";
+        } catch (Exception ignored) {}
+        return null;
+    }
+
     private boolean isSlip(String text, String qr, String fileName) {
         String lowerText = text.toLowerCase(Locale.ROOT);
-        String lowerFile = fileName.toLowerCase(Locale.ROOT);
+        String lowerFile = fileName != null ? fileName.toLowerCase(Locale.ROOT) : "";
 
         // QR check: EMVCo or PromptPay
         if (qr.startsWith("00") || qr.contains("000400") || qr.contains("001400") || qr.contains("000600")) {
             return true;
         }
 
-        // Common bank slip triggers
-        if (lowerText.contains("kbank") || lowerText.contains("scb") || lowerText.contains("krungthai") ||
-            lowerText.contains("kma") || lowerText.contains("ttb") || lowerText.contains("promptpay") ||
-            lowerText.contains("amount") || lowerText.contains("transfer") || lowerText.contains("successful") ||
-            lowerText.contains("จำนวนเงิน") || lowerText.contains("ยอดเงิน") || lowerText.contains("โอนสำเร็จ") ||
-            lowerText.contains("บาท") || lowerText.contains("baht")) {
+        // Common bank & slip keywords
+        if (lowerText.contains("k plus") || lowerText.contains("kbank") || lowerText.contains("scb") ||
+            lowerText.contains("krungthai") || lowerText.contains("ktb") || lowerText.contains("kma") ||
+            lowerText.contains("krungsri") || lowerText.contains("ttb") || lowerText.contains("bbl") ||
+            lowerText.contains("bualuang") || lowerText.contains("promptpay") || lowerText.contains("truemoney") ||
+            lowerText.contains("dime") || lowerText.contains("amount") || lowerText.contains("transfer") ||
+            lowerText.contains("successful") || lowerText.contains("จำนวน") || lowerText.contains("ยอดเงิน") ||
+            lowerText.contains("โอนสำเร็จ") || lowerText.contains("บาท") || lowerText.contains("baht")) {
+            return true;
+        }
+
+        // Structural pattern check (for Thai slips read by Latin OCR: has decimal amount AND time or masked account or ref code)
+        boolean hasDecimalAmount = Pattern.compile("[0-9]{1,3}(?:,[0-9]{3})*\\.[0-9]{2}").matcher(text).find();
+        boolean hasTime = Pattern.compile("[0-2]?[0-9]:[0-5][0-9]").matcher(text).find();
+        boolean hasMaskedAcc = Pattern.compile("(?i)[xX]{2,}-[xX0-9-]+").matcher(text).find();
+        boolean hasLongRef = Pattern.compile("\\b(?=[A-Za-z0-9]*\\d)[A-Za-z0-9]{14,35}\\b").matcher(text).find();
+        if (hasDecimalAmount && (hasTime || hasMaskedAcc || hasLongRef)) {
             return true;
         }
 
         // Filename hints
-        if (lowerFile.contains("slip") || lowerFile.contains("kbank") || lowerFile.contains("scb") || lowerFile.contains("transfer")) {
+        if (lowerFile.contains("slip") || lowerFile.contains("kbank") || lowerFile.contains("kplus") ||
+            lowerFile.contains("scb") || lowerFile.contains("transfer")) {
             return true;
         }
 
@@ -318,18 +370,21 @@ public class GalleryScannerPlugin extends Plugin {
         String categoryId = "food";
     }
 
-    private ParsedSlip parseSlipData(String text, String qr, String fileName, long dateAddedSec) {
+    private ParsedSlip parseSlipData(String text, String qr, String fileName, long dateAddedSec, String headerColorBank) {
         ParsedSlip p = new ParsedSlip();
+        if (headerColorBank != null) {
+            p.bankId = headerColorBank;
+        }
 
-        // 1. Bank detection
+        // 1. Bank detection from text or QR
         String upperText = text.toUpperCase(Locale.ROOT);
-        if (upperText.contains("KBANK") || upperText.contains("K PLUS") || upperText.contains("กสิกร")) {
+        if (upperText.contains("KBANK") || upperText.contains("K PLUS") || upperText.contains("กสิกร") || qr.contains("000400")) {
             p.bankId = "KBANK";
-        } else if (upperText.contains("SCB") || upperText.contains("ไทยพาณิชย์")) {
+        } else if (upperText.contains("SCB") || upperText.contains("ไทยพาณิชย์") || qr.contains("001400")) {
             p.bankId = "SCB";
-        } else if (upperText.contains("KTB") || upperText.contains("KRUNGTHAI") || upperText.contains("กรุงไทย") || upperText.contains("เป๋าตัง")) {
+        } else if (upperText.contains("KTB") || upperText.contains("KRUNGTHAI") || upperText.contains("กรุงไทย") || upperText.contains("เป๋าตัง") || qr.contains("000600")) {
             p.bankId = "KTB";
-        } else if (upperText.contains("BAY") || upperText.contains("KRUNGSRI") || upperText.contains("กรุงศรี")) {
+        } else if (upperText.contains("BAY") || upperText.contains("KRUNGSRI") || upperText.contains("KMA") || upperText.contains("กรุงศรี")) {
             p.bankId = "BAY";
         } else if (upperText.contains("TTB") || upperText.contains("TMB") || upperText.contains("THANACHART")) {
             p.bankId = "TTB";
@@ -344,13 +399,12 @@ public class GalleryScannerPlugin extends Plugin {
         }
 
         // 2. Extract Amount (Looking for decimal like 120.00 or 1,250.00)
-        Pattern amountPattern = Pattern.compile("(?i)(?:จำนวนเงิน|ยอดเงิน|Amount|จำนวน|ยอดโอน|โอนเงิน|บาท)?\\s*[:\\s]*([0-9]{1,3}(?:,[0-9]{3})*\\.[0-9]{2})");
-        Matcher m = amountPattern.matcher(text);
-        while (m.find()) {
+        Pattern generalDec = Pattern.compile("([0-9]{1,3}(?:,[0-9]{3})*\\.[0-9]{2})");
+        Matcher m2 = generalDec.matcher(text);
+        while (m2.find()) {
             try {
-                String amtStr = m.group(1).replace(",", "");
+                String amtStr = m2.group(1).replace(",", "");
                 double val = Double.parseDouble(amtStr);
-                // Exclude common year numbers like 2024.00, 2025.00, 2026.00, 2567.00, 2568.00, 2569.00
                 if (val > 0 && val < 500000 && val != 2024 && val != 2025 && val != 2026 && val != 2567 && val != 2568 && val != 2569) {
                     p.amount = val;
                     break;
@@ -358,70 +412,92 @@ public class GalleryScannerPlugin extends Plugin {
             } catch (Exception ignored) {}
         }
 
-        // Fallback amount: any decimal number
-        if (p.amount <= 0) {
-            Pattern generalDec = Pattern.compile("([0-9]{1,3}(?:,[0-9]{3})*\\.[0-9]{2})");
-            Matcher m2 = generalDec.matcher(text);
-            while (m2.find()) {
-                try {
-                    String amtStr = m2.group(1).replace(",", "");
-                    double val = Double.parseDouble(amtStr);
-                    if (val > 0 && val < 500000 && val != 2024 && val != 2025 && val != 2026 && val != 2567 && val != 2568 && val != 2569) {
-                        p.amount = val;
-                        break;
-                    }
-                } catch (Exception ignored) {}
-            }
-        }
-
         // 3. Extract Date & Time
-        Date dateObj = new Date(dateAddedSec > 0 ? dateAddedSec * 1000 : System.currentTimeMillis());
+        long nowSec = System.currentTimeMillis() / 1000;
+        long effectiveSec = (dateAddedSec > 1500000000L && dateAddedSec <= nowSec + 86400) ? dateAddedSec : nowSec;
+        Date dateObj = new Date(effectiveSec * 1000);
         SimpleDateFormat ymdFormat = new SimpleDateFormat("yyyy-MM-dd", Locale.US);
         SimpleDateFormat hmFormat = new SimpleDateFormat("HH:mm", Locale.US);
 
         p.date = ymdFormat.format(dateObj);
         p.time = hmFormat.format(dateObj);
 
-        // Try extracting time from text e.g. 14:32
         Pattern timePattern = Pattern.compile("([0-2]?[0-9]:[0-5][0-9])");
         Matcher timeMatcher = timePattern.matcher(text);
         if (timeMatcher.find()) {
-            p.time = timeMatcher.group(1);
+            String rawTime = timeMatcher.group(1);
+            if (rawTime.length() == 4) rawTime = "0" + rawTime;
+            p.time = rawTime;
         }
 
-        // 4. Extract Payee
-        String[] lines = text.split("\n");
-        boolean foundTo = false;
-        for (String line : lines) {
-            String trimmed = line.trim();
-            if (trimmed.startsWith("ไปยัง") || trimmed.startsWith("ถึง") || trimmed.toLowerCase().startsWith("to:")) {
-                foundTo = true;
-                continue;
+        // 4. Reference Code (try labeled first, then split ref, then standalone 12-35 char alphanumeric code)
+        Pattern refPattern = Pattern.compile("(?i)(?:เลขที่รายการ|รหัสอ้างอิง|Ref|Transaction ID|Trans ID)[:\\s]*([A-Za-z0-9]{10,35})");
+        Matcher refMatcher = refPattern.matcher(text);
+        if (refMatcher.find()) {
+            p.ref = refMatcher.group(1);
+        } else {
+            Pattern splitRef = Pattern.compile("\\b([0-9]{8,20})\\s+([A-Za-z0-9]{5,20})\\b");
+            Matcher sm = splitRef.matcher(text);
+            Pattern tokenRef = Pattern.compile("\\b(?=[A-Za-z0-9]*\\d)[A-Za-z0-9]{12,35}\\b");
+            Matcher tm = tokenRef.matcher(text);
+            if (tm.find()) {
+                p.ref = tm.group(0);
+            } else if (sm.find()) {
+                p.ref = sm.group(1) + sm.group(2);
+            } else if (!qr.isEmpty()) {
+                p.ref = "QR" + Math.abs(qr.hashCode());
+            } else {
+                p.ref = p.bankId + "_" + idFromFile(fileName, effectiveSec);
             }
-            if (foundTo && trimmed.length() > 2) {
-                p.payee = trimmed;
+        }
+
+        // 5. Extract Payee
+        String[] lines = text.split("\n");
+        int firstMaskedIdx = -1;
+        for (int i = 0; i < lines.length; i++) {
+            if (lines[i].matches("(?i).*[xX]{2,}-[xX0-9-]+.*")) {
+                firstMaskedIdx = i;
+                break;
+            }
+        }
+
+        // Only look at lines after sender's masked account (where payee resides on all Thai slips)
+        int startIdx = firstMaskedIdx >= 0 ? firstMaskedIdx + 1 : 0;
+        for (int i = startIdx; i < lines.length; i++) {
+            String trimmed = lines[i].trim();
+            if (trimmed.length() < 3) continue;
+            if (trimmed.contains(":")) continue;
+            if (!p.ref.isEmpty() && trimmed.replace(" ", "").contains(p.ref)) continue;
+            if (trimmed.matches("(?i).*[xX]{2,}-[xX0-9-]+.*")) continue;
+            if (trimmed.matches(".*[0-9]+\\.[0-9]{2}.*")) continue;
+            if (trimmed.matches(".*[0-2]?[0-9]:[0-5][0-9].*")) continue;
+            if (trimmed.matches(".*\\b[A-Za-z0-9]{10,}\\b.*")) continue;
+
+            // Keep clean ASCII Proper/Brand tokens (e.g., "7-Eleven", "Starbucks", "Uniqlo", "PTT")
+            // and drop Latin-OCR diacritic gibberish from misread Thai glyphs
+            StringBuilder cleanBrand = new StringBuilder();
+            for (String tok : trimmed.split("\\s+")) {
+                if (tok.matches(".*[\\u0080-\\u024F].*")) continue; // diacritic gibberish
+                if (tok.matches("[A-Z0-9][A-Za-z0-9&.'-]{1,}")) {
+                    if (cleanBrand.length() > 0) cleanBrand.append(" ");
+                    cleanBrand.append(tok);
+                }
+            }
+            String candidate = cleanBrand.toString().trim();
+            String up = candidate.toUpperCase(Locale.ROOT);
+            if (candidate.length() >= 3 && !up.equals("K PLUS") && !up.equals("SCB EASY") && !up.equals("KBANK") && !up.equals("SCB")) {
+                p.payee = candidate;
                 break;
             }
         }
 
         if (p.payee.equals("ร้านค้าพร้อมเพย์") || p.payee.isEmpty()) {
             if (p.bankId.equals("KBANK")) p.payee = "ร้านค้าพร้อมเพย์ (K PLUS)";
-            else if (p.bankId.equals("SCB")) p.payee = "ร้านค้า QR (SCB EASY)";
+            else if (p.bankId.equals("SCB")) p.payee = "สแกนจ่าย QR (SCB EASY)";
             else if (p.bankId.equals("KTB")) p.payee = "ร้านค้าเป๋าตัง / ถุงเงิน";
             else if (p.bankId.equals("BAY")) p.payee = "ร้านค้าพร้อมเพย์ (KMA)";
             else if (p.bankId.equals("TTB")) p.payee = "สแกนจ่าย QR (ttb)";
             else p.payee = "สแกนโอนจ่าย QR";
-        }
-
-        // 5. Reference Code
-        Pattern refPattern = Pattern.compile("(?i)(?:เลขที่รายการ|รหัสอ้างอิง|Ref|Transaction ID|Trans ID)[:\\s]*([A-Za-z0-9]{10,35})");
-        Matcher refMatcher = refPattern.matcher(text);
-        if (refMatcher.find()) {
-            p.ref = refMatcher.group(1);
-        } else if (!qr.isEmpty()) {
-            p.ref = "QR" + Math.abs(qr.hashCode());
-        } else {
-            p.ref = p.bankId + (dateAddedSec > 0 ? dateAddedSec : System.currentTimeMillis() / 1000);
         }
 
         // Categorize by keywords in payee
@@ -437,9 +513,16 @@ public class GalleryScannerPlugin extends Plugin {
                    lowerPayee.contains("mall") || lowerPayee.contains("shop")) {
             p.categoryId = "shopping";
         } else {
-            p.categoryId = "food"; // default
+            p.categoryId = "food";
         }
 
         return p;
+    }
+
+    private String idFromFile(String fileName, long fallback) {
+        if (fileName != null && !fileName.isEmpty()) {
+            return fileName.replaceAll("[^A-Za-z0-9]", "");
+        }
+        return String.valueOf(fallback);
     }
 }

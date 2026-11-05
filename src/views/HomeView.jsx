@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import SummaryCards from '../components/SummaryCards';
 import GoatWidget from '../components/GoatWidget';
 import TransactionItem from '../components/TransactionItem';
-import { Camera, Plus, Sparkles, Filter, ChevronRight, Receipt, Zap, Loader2, Calendar } from 'lucide-react';
+import { Camera, Plus, Sparkles, Filter, ChevronRight, Receipt, Zap, Loader2, Calendar, ArrowRight } from 'lucide-react';
 import { sound } from '../utils/sound';
+import { SAMPLE_TEST_SLIPS } from '../utils/slipParser';
 
 export default function HomeView({
   transactions,
@@ -17,7 +18,8 @@ export default function HomeView({
   onOpenDetailModal,
   onFeedGoat,
   onOpenGoatRoom,
-  onResetMonth
+  onResetMonth,
+  onAddTransaction
 }) {
   const [filterPeriod, setFilterPeriod] = useState('all');
 
@@ -178,23 +180,81 @@ export default function HomeView({
 
         {/* Empty state */}
         {sortedDates.length === 0 ? (
-          <div className="py-12 px-6 rounded-3xl bg-white border border-neutral-200/80 text-center">
-            <div className="w-16 h-16 mx-auto rounded-3xl bg-amber-100/60 text-amber-600 flex items-center justify-center text-3xl mb-3">
+          <div className="py-10 px-5 rounded-3xl bg-white border border-neutral-200/80 text-center space-y-4">
+            <div className="w-16 h-16 mx-auto rounded-3xl bg-amber-100/60 text-amber-600 flex items-center justify-center text-3xl">
               🐐
             </div>
-            <h4 className="font-bold text-neutral-800 text-sm mb-1">
-              ยังไม่มีรายการในเดือนนี้
-            </h4>
-            <p className="text-xs text-neutral-500 max-w-xs mx-auto mb-4">
-              แตะปุ่ม "กวาดอ่านสลิปอัตโนมัติ" ปิ๊กมี่จะไปดึงสลิปที่มีในเครื่องมาบันทึกให้ทันที!
-            </p>
-            <button
-              onClick={onTriggerAutoScan}
-              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-amber-500 text-white font-bold text-xs shadow-xs hover:bg-amber-600 active:scale-95"
-            >
-              <Zap className="w-4 h-4 fill-white" />
-              กวาดสลิปในเครื่องตอนนี้
-            </button>
+            <div>
+              <h4 className="font-extrabold text-neutral-800 text-sm mb-1">
+                {!isCurrentMonthNow ? `ไม่มีรายการในเดือน ${curMonth}/${curYear + 543}` : 'ยังไม่มีรายการในเดือนนี้'}
+              </h4>
+              <p className="text-xs text-neutral-500 max-w-xs mx-auto">
+                {!isCurrentMonthNow
+                  ? 'คุณกำลังเลือกดูเดือนอื่นอยู่ แตะปุ่มด้านล่างเพื่อกลับมาดูเดือนปัจจุบัน'
+                  : 'เลือกรูปสลิปจากอัลบั้มเพื่ออ่านยอดจริง หรือลองกดสลิปตัวอย่างเพื่อดูการทำงาน'}
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pt-1">
+              {!isCurrentMonthNow ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    sound.playPop();
+                    if (onResetMonth) onResetMonth();
+                  }}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-amber-500 text-white font-extrabold text-xs shadow-xs hover:bg-amber-600 active:scale-95 transition-all"
+                >
+                  <Calendar className="w-4 h-4" />
+                  กลับมาเดือนปัจจุบัน (พ.ย. 2569) ↩
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      sound.playPop();
+                      onOpenScanModal();
+                    }}
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-amber-500 text-white font-extrabold text-xs shadow-xs hover:bg-amber-600 active:scale-95 transition-all"
+                  >
+                    <Camera className="w-4 h-4" />
+                    เลือกรูปสลิปจากเครื่อง
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      sound.playPop();
+                      const sample = SAMPLE_TEST_SLIPS[Math.floor(Math.random() * SAMPLE_TEST_SLIPS.length)];
+                      const rnd = Math.floor(100000 + Math.random() * 900000);
+                      const d = new Date();
+                      const todayStr = d.toISOString().split('T')[0];
+                      if (onAddTransaction) {
+                        onAddTransaction({
+                          id: 'tx_sample_' + Date.now(),
+                          date: todayStr,
+                          time: sample.time || '12:30',
+                          timestamp: Date.now(),
+                          amount: sample.amount,
+                          bankId: sample.bankId,
+                          payee: sample.payee,
+                          sender: sample.sender,
+                          categoryId: sample.categoryId,
+                          ref: `${sample.bankId}${rnd}`,
+                          note: sample.note + ' (ตัวอย่างทดสอบ)',
+                          isManual: false,
+                        });
+                      }
+                    }}
+                    className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-bold text-xs active:scale-95 transition-all"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                    ลองเพิ่มสลิปตัวอย่าง (1-Click)
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         ) : (
           <div className="space-y-4">

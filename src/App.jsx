@@ -45,16 +45,14 @@ export default function App() {
 
   // Trigger Automatic Gallery Scanning (ไม่ต้องเลือกรูปเอง)
   const handleTriggerAutoScan = async (isSilentOnStartup = false) => {
-    setIsAutoScanning(true);
-
-    let res;
-    if (AutoScanner.isNative()) {
-      res = await AutoScanner.scanNativeGallery(transactions, categories, merchantRules);
-    } else {
-      // In web browser / PWA: simulate scan or use directory
-      res = await AutoScanner.simulateAutoScan(transactions, categories, merchantRules);
+    // If running in Web Browser / PWA (not native APK), open Scan Modal directly so user can pick slips or try sample
+    if (!AutoScanner.isNative()) {
+      setIsScanOpen(true);
+      return;
     }
 
+    setIsAutoScanning(true);
+    const res = await AutoScanner.scanNativeGallery(transactions, categories, merchantRules);
     setIsAutoScanning(false);
 
     if (res && res.success && res.newSlips && res.newSlips.length > 0) {
@@ -103,6 +101,7 @@ export default function App() {
 
   // Batch import from slips (manual picker)
   const handleImportBatch = (newTxList) => {
+    setCurrentDate(new Date());
     const updated = Storage.addBatchTransactions(newTxList);
     setTransactions(updated);
     const newGoat = Storage.feedGoat(newTxList.length);
@@ -111,6 +110,7 @@ export default function App() {
 
   // Single add manual
   const handleAddManual = (tx) => {
+    setCurrentDate(new Date());
     const updated = Storage.addTransaction(tx);
     setTransactions(updated);
     const newGoat = Storage.feedGoat(1);
@@ -225,6 +225,7 @@ export default function App() {
             onFeedGoat={handleFeedGoat}
             onOpenGoatRoom={() => setActiveTab('goat')}
             onResetMonth={() => setCurrentDate(new Date())}
+            onAddTransaction={handleAddManual}
           />
         )}
 

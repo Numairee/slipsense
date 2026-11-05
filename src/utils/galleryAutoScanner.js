@@ -40,11 +40,9 @@ export const AutoScanner = {
    */
   async scanNativeGallery(existingTransactions = [], categories = [], merchantRules = {}) {
     try {
-      // Look back 60 days to catch all recent slips
-      const sixtyDaysAgoSec = Math.floor((Date.now() - 60 * 86400 * 1000) / 1000);
+      // Scan across all photo albums & bank folders (up to 500 images)
       const res = await GalleryScanner.scanRecentSlips({
-        limit: 80,
-        since: sixtyDaysAgoSec
+        limit: 500
       });
 
       if (!res) {

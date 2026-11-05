@@ -73,17 +73,29 @@ export function parseSlipVerifyQR(qrText) {
     let bankCode = null;
     let transRef = null;
 
-    if (qrText.length >= 12) {
+    // 1. Official Standard SlipVerify Mini-QR: Tag 01 Length 03 = 0103[BOT_CODE]
+    const match0103 = qrText.match(/0103(\d{3})/);
+    if (match0103 && BOT_BANK_CODES[match0103[1]]) {
+      bankCode = BOT_BANK_CODES[match0103[1]];
+    }
+
+    // 2. Extract transaction reference
+    const matchRef = qrText.match(/02(\d{2})([A-Za-z0-9]+)/);
+    if (matchRef) {
+      const len = parseInt(matchRef[1], 10);
+      if (len > 0) transRef = matchRef[2].slice(0, len);
+    } else {
+      const generalRef = qrText.match(/[A-Z0-9]{12,30}/);
+      if (generalRef) transRef = generalRef[0];
+    }
+
+    // 3. Fallback bank search
+    if (!bankCode) {
       for (const [code, bankId] of Object.entries(BOT_BANK_CODES)) {
-        if (qrText.includes(`00${code}`) || qrText.includes(code)) {
+        if (qrText.includes(`00${code}`) || qrText.includes(`0${code}0`)) {
           bankCode = bankId;
           break;
         }
-      }
-
-      const matchRef = qrText.match(/[A-Z0-9]{12,30}/);
-      if (matchRef) {
-        transRef = matchRef[0];
       }
     }
 

@@ -1,0 +1,79 @@
+name: Build Android APK for iQOO 15
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    name: Build Pygmy APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install Web Dependencies & Build
+        run: |
+          npm ci
+          npm run build
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Sync Capacitor to Android
+        run: |
+          npx cap sync android
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x android/gradlew
+
+      - name: Build APK with Gradle
+        run: |
+          cd android
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Rename APK for iQOO 15
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk android/app/build/outputs/apk/debug/Pygmy-iQOO15.apk
+
+      - name: Upload APK to Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Pygmy-iQOO15-APK
+          path: android/app/build/outputs/apk/debug/Pygmy-iQOO15.apk
+          retention-days: 30
+
+      - name: Create GitHub Release with APK
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main'
+        with:
+          tag_name: v1.0.0-apk
+          name: "Pygmy Android v1.0.0 (iQOO 15 Edition)"
+          body: |
+            ## 📱 Pygmy: No-Track Tracker APK for Android / iQOO 15
+            - **Target Phone:** iQOO 15 (Snapdragon 8 Elite, 144Hz AMOLED, OriginOS 5 / Android 15)
+            - **Architecture:** `arm64-v8a` (64-bit)
+            - **Core:** High-Performance Rust Core Engine
+            - **Privacy:** 100% Offline, On-Device MediaStore Auto-Slip Scanner
+            
+            ### 📥 วิธีติดตั้ง:
+            1. ดาวน์โหลดไฟล์ `Pygmy-iQOO15.apk` ด้านล่างลงมือถือ
+            2. แตะเปิดไฟล์เพื่อติดตั้ง (อนุญาต Install Unknown Apps หากระบบถาม)
+            3. ใช้งานได้ทันที 100% ไม่ต้องต่อเน็ต
+          files: android/app/build/outputs/apk/debug/Pygmy-iQOO15.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

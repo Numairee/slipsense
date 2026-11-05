@@ -8,17 +8,23 @@ let workerPromise = null;
 async function getWorker() {
   if (!workerPromise) {
     workerPromise = (async () => {
-      const worker = await createWorker('eng+tha', 1, {
-        logger: () => {}, // silent in production
-      });
-      return worker;
+      try {
+        const worker = await createWorker('eng+tha', 1, {
+          logger: () => {},
+        });
+        return worker;
+      } catch (err) {
+        workerPromise = null;
+        throw err;
+      }
     })();
   }
   return workerPromise;
 }
 
 /**
- * Preprocess image on canvas: Grayscale + Contrast Stretch for maximum OCR readability
+ * Preprocess image on canvas: Gentle Grayscale + Contrast Enhancement
+ * Preserves gray and colored slip text without wiping out midtones
  */
 export function preprocessCanvasForOCR(sourceCanvas) {
   const canvas = document.createElement('canvas');
@@ -30,15 +36,14 @@ export function preprocessCanvasForOCR(sourceCanvas) {
   const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const data = imgData.data;
 
-  // Convert to grayscale & increase contrast
   for (let i = 0; i < data.length; i += 4) {
     const r = data[i];
     const g = data[i + 1];
     const b = data[i + 2];
     const gray = 0.299 * r + 0.587 * g + 0.114 * b;
 
-    // High-contrast text binarization threshold
-    const enhanced = gray > 140 ? 255 : (gray < 80 ? 0 : gray);
+    // Gentle contrast curve that keeps gray slip labels (rgb 120-180) legible
+    const enhanced = gray > 225 ? 255 : gray < 50 ? 0 : Math.round(((gray - 50) / 175) * 220);
     data[i] = enhanced;
     data[i + 1] = enhanced;
     data[i + 2] = enhanced;
@@ -49,22 +54,29 @@ export function preprocessCanvasForOCR(sourceCanvas) {
 }
 
 /**
- * Run OCR on image canvas and parse financial slip entities
+ * Run OCR on image canvas with timeout protection so UI never hangs
  */
-export async function runSlipOCR(canvas) {
+export async function runSlipOCR(canvas, timeoutMs = 5500) {
   try {
     const processed = preprocessCanvasForOCR(canvas);
-    const worker = await getWorker();
-    const ret = await worker.recognize(processed);
-    const text = ret.data.text || '';
+    const ocrTask = (async () => {
+      const worker = await getWorker();
+      const ret = await worker.recognize(processed);
+      const text = ret?.data?.text || '';
+      return {
+        success: true,
+        text,
+        parsed: parseTextToSlipFields(text)
+      };
+    })();
 
-    return {
-      success: true,
-      text,
-      parsed: parseTextToSlipFields(text)
-    };
+    const timeoutTask = new Promise((resolve) =>
+      setTimeout(() => resolve({ success: false, text: '', parsed: null, timedOut: true }), timeoutMs)
+    );
+
+    return await Promise.race([ocrTask, timeoutTask]);
   } catch (err) {
-    console.warn('OCR error, using canvas heuristics fallback:', err);
+    console.warn('OCR error, using fallback:', err);
     return {
       success: false,
       text: '',
@@ -73,9 +85,6 @@ export async function runSlipOCR(canvas) {
   }
 }
 
-/**
- * Parse raw text into structured Thai slip data
- */
 /**
  * Tesseract often emits Thai with a space between every glyph ("เล ข ท ี ร า ย ก า ร").
  * Collapse whitespace between Thai characters (and around dots inside Thai abbreviations
@@ -94,24 +103,22 @@ export function normalizeThaiOcr(text = '') {
 }
 
 const THAI_MARKS = '[\\u0E31\\u0E34-\\u0E3A\\u0E47-\\u0E4E\\s]*';
-// Order matters: more specific abbreviations first (มี.ค./มิ.ย. before ม.ค.)
 const THAI_MONTHS = [
   ['มี.ค.', '03'], ['มิ.ย.', '06'], ['ม.ค.', '01'], ['ก.พ.', '02'], ['เม.ย.', '04'],
   ['พ.ค.', '05'], ['ก.ค.', '07'], ['ส.ค.', '08'], ['ก.ย.', '09'], ['ต.ค.', '10'],
   ['พ.ย.', '11'], ['ธ.ค.', '12']
 ].map(([abbr, mm]) => {
-  // Tolerate stray OCR vowel marks and missing dots between letters
   const body = [...abbr.replace(/\./g, '')].map(ch => ch).join(`${THAI_MARKS}\\.?${THAI_MARKS}`);
   return { mm, re: new RegExp(`(\\d{1,2})\\s*${body}${THAI_MARKS}\\.?\\s*(\\d{2,4})`) };
 });
 
 function normalizeYear(y) {
-  if (y < 100) y += y >= 40 ? 2500 : 2000; // 2-digit years on Thai slips are Buddhist Era (69 = 2569)
+  if (y < 100) y += y >= 40 ? 2500 : 2000;
   if (y > 2400) y -= 543;
   return y;
 }
 
-const MASKED_ACCOUNT_RE = /[xX%๐\d]{2,}\s*-[xX%๐\d\s-]*\d{3,}/;
+const MASKED_ACCOUNT_RE = /[xX*%๐\d]{2,}\s*-[xX*%๐\d\s-]*\d{3,}/;
 
 export function parseTextToSlipFields(rawText = '') {
   const text = normalizeThaiOcr(rawText);
@@ -119,16 +126,14 @@ export function parseTextToSlipFields(rawText = '') {
 
   // 1. Extract Amount
   let amount = null;
-  // Match lines with Amount / จำนวนเงิน / ยอดเงิน
-  const amountExplicitRe = /(?:จำนวนเงิน|ยอดเงิน|Amount|จำนวน|ยอดโอน|โอนเงิน|บาท)?\s*[:\s]*([0-9]{1,3}(?:,[0-9]{3})*\.[0-9]{2})/i;
-  const generalDecRe = /([0-9]{1,3}(?:,[0-9]{3})*\.[0-9]{2})/g;
+  const amountExplicitRe = /(?:จำนวนเงิน|ยอดเงิน|Amount|จำนวน|ยอดโอน|โอนเงิน|บาท)?\s*[:\s]*\b([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{1,6})\s*\.\s*([0-9]{2})\b/i;
+  const generalDecRe = /\b([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{1,6})\s*\.\s*([0-9]{2})\b/g;
 
-  // Try explicit line first
   for (const line of lines) {
-    if (line.includes('จำนวน') || line.includes('ยอด') || line.toLowerCase().includes('amount') || line.includes('บาท')) {
+    if (line.includes('จำนวน') || line.includes('ยอด') || line.toLowerCase().includes('amount') || line.includes('บาท') || line.toLowerCase().includes('thb')) {
       const match = line.match(amountExplicitRe);
       if (match) {
-        const val = parseFloat(match[1].replace(/,/g, ''));
+        const val = parseFloat(`${match[1].replace(/,/g, '')}.${match[2]}`);
         if (val > 0 && val < 1000000 && val !== 2024 && val !== 2025 && val !== 2026 && val !== 2567 && val !== 2568 && val !== 2569) {
           amount = val;
           break;
@@ -137,11 +142,10 @@ export function parseTextToSlipFields(rawText = '') {
     }
   }
 
-  // Fallback: search all decimal numbers
   if (!amount) {
-    const allMatches = text.match(generalDecRe) || [];
-    for (const m of allMatches) {
-      const val = parseFloat(m.replace(/,/g, ''));
+    let m;
+    while ((m = generalDecRe.exec(text)) !== null) {
+      const val = parseFloat(`${m[1].replace(/,/g, '')}.${m[2]}`);
       if (val >= 1.0 && val < 500000 && val !== 2024 && val !== 2025 && val !== 2026 && val !== 2567 && val !== 2568 && val !== 2569) {
         amount = val;
         break;
@@ -151,20 +155,25 @@ export function parseTextToSlipFields(rawText = '') {
 
   // 2. Extract Time
   let time = null;
-  const timeRe = /(\d{1,2}[:.]\d{2})/g;
+  const timeColonRe = /\b([0-2]?\d:[0-5]\d)\b/;
+  const timeDotRe = /\b([0-2]?\d\.[0-5]\d)\s*น\./;
   for (const line of lines) {
-    if (line.includes('เวลา') || line.includes('น.') || line.includes(':')) {
-      const m = line.match(timeRe);
-      if (m && m.length > 0) {
-        time = m[0].replace('.', ':');
-        break;
-      }
+    const mc = line.match(timeColonRe);
+    if (mc) {
+      time = mc[1].length === 4 ? '0' + mc[1] : mc[1];
+      break;
+    }
+    const md = line.match(timeDotRe);
+    if (md) {
+      const t = md[1].replace('.', ':');
+      time = t.length === 4 ? '0' + t : t;
+      break;
     }
   }
 
   // 3. Extract Date
   let date = null;
-  const dateSlashRe = /(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/;
+  const dateSlashRe = /\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})\b/;
 
   for (const line of lines) {
     let found = false;
@@ -185,8 +194,10 @@ export function parseTextToSlipFields(rawText = '') {
       const d = slashMatch[1].padStart(2, '0');
       const m = slashMatch[2].padStart(2, '0');
       const y = normalizeYear(parseInt(slashMatch[3], 10));
-      date = `${y}-${m}-${d}`;
-      break;
+      if (parseInt(m, 10) >= 1 && parseInt(m, 10) <= 12 && parseInt(d, 10) >= 1 && parseInt(d, 10) <= 31) {
+        date = `${y}-${m}-${d}`;
+        break;
+      }
     }
   }
 
@@ -205,7 +216,6 @@ export function parseTextToSlipFields(rawText = '') {
       break;
     }
   }
-  // K PLUS style (no label): payee is the first name line after the sender's masked account
   if (!payee) {
     const firstAcc = lines.findIndex(l => MASKED_ACCOUNT_RE.test(l));
     if (firstAcc >= 0) {
@@ -229,7 +239,7 @@ export function parseTextToSlipFields(rawText = '') {
     }
   }
 
-  // 6. Extract Reference (code may be on the same line as the label or the next line)
+  // 6. Extract Reference
   let refCode = null;
   const refLabelRe = /(?:รหัสอ้างอิง|เลขที่?รายการ|เลขที่?อ้างอิง|Ref(?:erence)?|Transaction ID)/i;
   const codeRe = /([A-Za-z0-9]{10,35})/;

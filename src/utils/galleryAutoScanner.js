@@ -9,7 +9,10 @@ const GalleryScanner = registerPlugin('GalleryScanner');
 
 export const AutoScanner = {
   isNative() {
-    return typeof window !== 'undefined' && window.Capacitor?.isNativePlatform();
+    if (typeof window === 'undefined') return false;
+    if (window.Capacitor?.isNativePlatform()) return true;
+    const ua = navigator.userAgent || '';
+    return /;\s*wv\)/i.test(ua);
   },
 
   /**
@@ -40,7 +43,7 @@ export const AutoScanner = {
       // Look back 60 days to catch all recent slips
       const sixtyDaysAgoSec = Math.floor((Date.now() - 60 * 86400 * 1000) / 1000);
       const res = await GalleryScanner.scanRecentSlips({
-        limit: 50,
+        limit: 80,
         since: sixtyDaysAgoSec
       });
 

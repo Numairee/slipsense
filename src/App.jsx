@@ -32,6 +32,19 @@ export default function App() {
   const [isAutoScanning, setIsAutoScanning] = useState(false);
   const [scanToast, setScanToast] = useState(null);
 
+  const syncMonthToLatestSlip = (slips = []) => {
+    if (!slips || slips.length === 0) return;
+    const firstDateStr = slips[0]?.date;
+    if (firstDateStr && /^\d{4}-\d{2}-\d{2}$/.test(firstDateStr)) {
+      const [y, m] = firstDateStr.split('-').map(Number);
+      if (y >= 2000 && m >= 1 && m <= 12) {
+        setCurrentDate(new Date(y, m - 1, 1));
+        return;
+      }
+    }
+    setCurrentDate(new Date());
+  };
+
   // Month navigation
   const handlePrevMonth = () => {
     sound.playPop();
@@ -45,7 +58,6 @@ export default function App() {
 
   // Trigger Automatic Gallery Scanning (ไม่ต้องเลือกรูปเอง)
   const handleTriggerAutoScan = async (isSilentOnStartup = false) => {
-    // If running in Web Browser / PWA (not native APK), open Scan Modal directly so user can pick slips or try sample
     if (!AutoScanner.isNative()) {
       setIsScanOpen(true);
       return;
@@ -56,8 +68,7 @@ export default function App() {
     setIsAutoScanning(false);
 
     if (res && res.success && res.newSlips && res.newSlips.length > 0) {
-      // Auto-import new slips and jump to current month so user sees them immediately
-      setCurrentDate(new Date());
+      syncMonthToLatestSlip(res.newSlips);
       const updated = Storage.addBatchTransactions(res.newSlips);
       setTransactions(updated);
       const newGoat = Storage.feedGoat(res.newSlips.length);
@@ -74,48 +85,60 @@ export default function App() {
       }, 300);
 
       setScanToast({
-        message: `พบสลิปใหม่ ${res.newSlips.length} ใบในเครื่อง บันทึกและให้อาหารน้องปิ๊กมี่แล้ว! (ข้ามสลิปซ้ำ ${res.duplicatesCount || 0} ใบ)`
+        title: `พบสลิปใหม่ ${res.newSlips.length} ใบ! 🎉`,
+        message: `บันทึกยอดและให้อาหารน้องปิ๊กมี่เรียบร้อยแล้ว (ข้ามสลิปซ้ำ ${res.duplicatesCount || 0} ใบ)`
       });
 
-      // Auto dismiss toast after 5s
       setTimeout(() => setScanToast(null), 5000);
     } else if (res && res.success === false && !isSilentOnStartup) {
       setScanToast({
-        message: `ไม่สามารถเข้าถึงอัลบั้มภาพอัตโนมัติได้ (${res.error || 'กรุณาอนุญาตสิทธิ์รูปภาพ'})`
+        title: 'ต้องการสิทธิ์เข้าถึงอัลบั้มรูปภาพ',
+        message: 'กรุณาอนุญาตสิทธิ์รูปภาพ หรือกดปุ่มด้านขวาเพื่อเลือกรูปสลิปเอง',
+        actionLabel: 'เลือกรูปเอง',
+        onAction: () => setIsScanOpen(true)
       });
-      setTimeout(() => setScanToast(null), 5000);
+      setTimeout(() => setScanToast(null), 6000);
     } else if (!isSilentOnStartup) {
+      const dupMsg = res?.duplicatesCount > 0 ? ` (พบสลิปที่บันทึกไปแล้ว ${res.duplicatesCount} ใบ)` : '';
       setScanToast({
-        message: 'ตรวจเช็กอัลบั้มแล้ว ข้อมูลสลิปเป็นปัจจุบัน ไม่มีสลิปใหม่เพิ่มเติม'
+        title: `ตรวจอัลบั้มแล้ว (${res?.totalScanned || 0} รูป)${dupMsg}`,
+        message: 'ไม่พบสลิปใหม่เพิ่มเติม หากสลิปอยู่ในโฟลเดอร์อื่น กดเลือกรูปสลิปได้เลย',
+        actionLabel: 'เลือกรูปสลิป',
+        onAction: () => setIsScanOpen(true)
       });
-      setTimeout(() => setScanToast(null), 4000);
+      setTimeout(() => setScanToast(null), 5500);
     }
   };
 
   // Auto-Scan in background on app startup (just like Pygmy iOS)
   useEffect(() => {
     const timer = setTimeout(() => {
-      // Run quiet background scan on launch
       if (AutoScanner.isNative()) {
         handleTriggerAutoScan(true);
       }
-    }, 2000);
+    }, 1500);
 
     return () => clearTimeout(timer);
   }, []);
 
   // Batch import from slips (manual picker)
   const handleImportBatch = (newTxList) => {
-    setCurrentDate(new Date());
+    syncMonthToLatestSlip(newTxList);
     const updated = Storage.addBatchTransactions(newTxList);
     setTransactions(updated);
     const newGoat = Storage.feedGoat(newTxList.length);
     setGoatState(newGoat);
+
+    setScanToast({
+      title: `บันทึกสลิปสำเร็จ ${newTxList.length} ใบ! 🎉`,
+      message: 'เพิ่มรายการเข้าสรุปยอดและให้อาหารน้องปิ๊กมี่เรียบร้อยแล้ว'
+    });
+    setTimeout(() => setScanToast(null), 4000);
   };
 
   // Single add manual
   const handleAddManual = (tx) => {
-    setCurrentDate(new Date());
+    syncMonthToLatestSlip([tx]);
     const updated = Storage.addTransaction(tx);
     setTransactions(updated);
     const newGoat = Storage.feedGoat(1);
@@ -191,7 +214,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-neutral-100 flex flex-col font-sans select-none antialiased text-neutral-900">
+    <div className="min-h-screen bg-[#FAF8F5] flex flex-col font-sans select-none antialiased text-neutral-900">
       {/* Auto-Scan Floating Toast Notification */}
       <AutoScanToast
         notification={scanToast}
@@ -211,8 +234,8 @@ export default function App() {
       />
 
       {/* Main Container */}
-      <main className="flex-1 max-w-md w-full mx-auto px-4 pt-3">
-        {/* Android PWA Install Prompt Banner */}
+      <main className="flex-1 max-w-md w-full mx-auto px-3.5 pt-2.5">
+        {/* Android APK Download Prompt Banner (only shown on web browser, hidden inside APK) */}
         <InstallPrompt />
 
         {/* Tab Views */}

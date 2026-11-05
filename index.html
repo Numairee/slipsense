@@ -6,26 +6,26 @@
     <link rel="apple-touch-icon" href="/favicon.svg" />
     <link rel="manifest" href="/manifest.json" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <meta name="theme-color" content="#171717" />
+    <meta name="theme-color" content="#FAF8F5" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="description" content="Pygmy: No-Track Tracker - แอปจดรายจ่ายแบบไม่จดสำหรับ Android ออฟไลน์ 100% ไม่ส่งข้อมูลออกนอกเครื่อง" />
-    <title>Pygmy: จดรายจ่ายแบบไม่จด (No-Track Tracker)</title>
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="description" content="Pygmy: No-Track Tracker v1.0.2 - แอปจดรายจ่ายแบบไม่จดสำหรับ Android ออฟไลน์ 100% ไม่ส่งข้อมูลออกนอกเครื่อง" />
+    <title>Pygmy v1.0.2: จดรายจ่ายแบบไม่จด (No-Track Tracker)</title>
   </head>
-  <body class="bg-neutral-100 text-neutral-900 select-none overflow-x-hidden">
+  <body class="bg-[#FAF8F5] text-neutral-900 select-none overflow-x-hidden">
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
     <script>
+      // Force-clear any stale Service Worker caches from earlier builds so UI updates immediately
       if ('serviceWorker' in navigator) {
-        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-          navigator.serviceWorker.getRegistrations().then(regs => {
-            for (let reg of regs) reg.unregister();
-          });
-        } else if (window.location.protocol.startsWith('http')) {
-          window.addEventListener('load', () => {
-            navigator.serviceWorker.register('/sw.js').catch(() => {});
-          });
-        }
+        navigator.serviceWorker.getRegistrations().then(regs => {
+          for (let reg of regs) reg.unregister();
+        }).catch(() => {});
+      }
+      if ('caches' in window) {
+        caches.keys().then(keys => {
+          for (let key of keys) caches.delete(key);
+        }).catch(() => {});
       }
     </script>
   </body>

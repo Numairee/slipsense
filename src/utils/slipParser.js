@@ -1,10 +1,13 @@
 // On-Device Thai Bank Slip Parser Engine (Pygmy No-Track Tracker)
-// 100% Offline & Private - Integrates Real Tesseract OCR + jsQR + Header Color Analysis
+// 100% Offline & Private - Integrates Native Android ML Kit + Tesseract OCR + jsQR + Header Color Analysis
 
 import jsQR from 'jsqr';
+import { registerPlugin } from '@capacitor/core';
 import { THAI_BANKS, BANK_LIST, detectBankFromText } from '../data/banks';
 import { matchCategory } from '../data/defaultCategories';
 import { runSlipOCR } from './ocrEngine';
+
+const GalleryScanner = registerPlugin('GalleryScanner');
 
 // BOT Bank code mapping to bank ID
 const BOT_BANK_CODES = {
@@ -21,7 +24,6 @@ const BOT_BANK_CODES = {
 
 /**
  * Analyze dominant color of the top header area of the slip
- * Thai bank slips have unique header colors (Green, Purple, Light Blue, Yellow, etc.)
  */
 export function analyzeBankColor(ctx, width, height) {
   const headerHeight = Math.max(10, Math.floor(height * 0.18));
@@ -49,12 +51,11 @@ export function analyzeBankColor(ctx, width, height) {
   const avgG = totalG / count;
   const avgB = totalB / count;
 
-  // Determine bank signature
-  if (avgG > avgR * 1.25 && avgG > avgB * 1.25 && avgG > 70) return 'KBANK';
-  if (avgB > avgG * 1.3 && avgR > avgG * 1.1 && avgB > 60) return 'SCB';
-  if (avgR > 140 && avgG > 120 && avgB < 100) return 'BAY';
-  if (avgB > avgR * 1.4 && avgG > avgR * 1.1 && avgB > 110) return 'KTB';
-  if (avgR > 180 && avgG > 80 && avgG < 150 && avgB < 70) return 'TRUEMONEY';
+  if (avgG > avgR * 1.22 && avgG > avgB * 1.22 && avgG > 65) return 'KBANK';
+  if (avgB > avgG * 1.25 && avgR > avgG * 1.08 && avgB > 55) return 'SCB';
+  if (avgR > 140 && avgG > 115 && avgB < 105) return 'BAY';
+  if (avgB > avgR * 1.35 && avgG > avgR * 1.1 && avgB > 105) return 'KTB';
+  if (avgR > 175 && avgG > 75 && avgG < 155 && avgB < 75) return 'TRUEMONEY';
   if (avgR > 180 && avgB > 100 && avgG < 100) return 'DIME';
   if (avgB > avgR * 1.4 && avgB > avgG * 1.2) return 'BBL';
   if (avgB > avgG * 1.15 && avgB > 70) return 'TTB';
@@ -72,9 +73,9 @@ export function parseSlipVerifyQR(qrText) {
     let bankCode = null;
     let transRef = null;
 
-    if (qrText.startsWith('00') && qrText.length >= 20) {
+    if (qrText.length >= 12) {
       for (const [code, bankId] of Object.entries(BOT_BANK_CODES)) {
-        if (qrText.includes(code)) {
+        if (qrText.includes(`00${code}`) || qrText.includes(code)) {
           bankCode = bankId;
           break;
         }
@@ -93,7 +94,7 @@ export function parseSlipVerifyQR(qrText) {
 }
 
 /**
- * Extract transaction data from image file using REAL on-device OCR & QR analysis
+ * Extract transaction data from image file using Native Android ML Kit (when on APK) + JS OCR & QR
  */
 export async function parseSlipImage(file, merchantRules = {}, categories = []) {
   return new Promise((resolve) => {
@@ -101,12 +102,30 @@ export async function parseSlipImage(file, merchantRules = {}, categories = []) 
 
     reader.onload = async (e) => {
       const dataUrl = e.target.result;
+      const isNativeAndroid = typeof window !== 'undefined' && window.Capacitor?.isNativePlatform();
+
+      // 0. Fast-path on Android APK: Use native Google ML Kit OCR + Barcode Scanner (<150ms, 100% offline)
+      let nativeSlip = null;
+      if (isNativeAndroid) {
+        try {
+          const natRes = await GalleryScanner.analyzeSingleImage({
+            dataUrl,
+            fileName: file.name || 'slip.jpg'
+          });
+          if (natRes && natRes.success && natRes.slip) {
+            nativeSlip = natRes.slip;
+          }
+        } catch (err) {
+          console.warn('Native analyzeSingleImage fallback to canvas OCR:', err);
+        }
+      }
+
       const img = new Image();
 
       img.onload = async () => {
         try {
           const canvas = document.createElement('canvas');
-          const maxDim = 1200;
+          const maxDim = 1280;
           let width = img.width;
           let height = img.height;
 
@@ -125,17 +144,17 @@ export async function parseSlipImage(file, merchantRules = {}, categories = []) 
           const ctx = canvas.getContext('2d', { willReadFrequently: true });
           ctx.drawImage(img, 0, 0, width, height);
 
-          // 1. Scan for QR code
-          let detectedBankId = null;
-          let refCode = null;
+          // 1. Scan for QR code via jsQR
+          let detectedBankId = nativeSlip?.bankId || null;
+          let refCode = nativeSlip?.ref || null;
           try {
             const imgData = ctx.getImageData(0, 0, width, height);
             const qrCode = jsQR(imgData.data, width, height);
             if (qrCode && qrCode.data) {
               const qrParsed = parseSlipVerifyQR(qrCode.data);
               if (qrParsed) {
-                if (qrParsed.bankCode) detectedBankId = qrParsed.bankCode;
-                if (qrParsed.transRef) refCode = qrParsed.transRef;
+                if (qrParsed.bankCode && !detectedBankId) detectedBankId = qrParsed.bankCode;
+                if (qrParsed.transRef && !refCode) refCode = qrParsed.transRef;
               }
             }
           } catch {
@@ -148,9 +167,16 @@ export async function parseSlipImage(file, merchantRules = {}, categories = []) 
             detectedBankId = colorBank;
           }
 
-          // 3. RUN REAL OCR ON SLIP IMAGE (Tesseract.js)
-          const ocrRes = await runSlipOCR(canvas);
-          const ocrParsed = ocrRes?.parsed;
+          // 3. Run Tesseract OCR (on Web, or quick 2.5s enrichment on Android if payee wasn't English)
+          let ocrParsed = null;
+          let rawOcrText = nativeSlip?.rawOcrText || '';
+          const shouldRunTesseract = !nativeSlip || !nativeSlip.amount || (nativeSlip.payee && nativeSlip.payee.startsWith('โอนจ่าย'));
+          if (shouldRunTesseract) {
+            const timeoutMs = nativeSlip?.amount ? 2500 : 5500;
+            const ocrRes = await runSlipOCR(canvas, timeoutMs);
+            ocrParsed = ocrRes?.parsed;
+            if (ocrRes?.text) rawOcrText = ocrRes.text;
+          }
 
           if (ocrParsed) {
             if (ocrParsed.bankId && !detectedBankId) detectedBankId = ocrParsed.bankId;
@@ -159,7 +185,6 @@ export async function parseSlipImage(file, merchantRules = {}, categories = []) 
 
           if (!detectedBankId) detectedBankId = 'KBANK';
 
-          // Generate reference if none found
           if (!refCode) {
             const rnd = Math.floor(100000 + Math.random() * 900000);
             const d = new Date();
@@ -171,26 +196,27 @@ export async function parseSlipImage(file, merchantRules = {}, categories = []) 
           const todayStr = now.toISOString().split('T')[0];
           const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
 
-          // Real values extracted from OCR
-          const finalAmount = ocrParsed?.amount || generateSuggestedAmount(file.name);
-          const finalPayee = ocrParsed?.payee || getSuggestedPayee(file.name, detectedBankId);
-          const finalDate = ocrParsed?.date || todayStr;
-          const finalTime = ocrParsed?.time || timeStr;
-          const finalSender = ocrParsed?.sender || 'บัญชีของฉัน';
+          // Merge Native ML Kit + Tesseract OCR results
+          const finalAmount = nativeSlip?.amount || ocrParsed?.amount || generateSuggestedAmount(file.name);
+          const finalPayee = ocrParsed?.payee || nativeSlip?.payee || getSuggestedPayee(file.name, detectedBankId);
+          const finalDate = ocrParsed?.date || nativeSlip?.date || todayStr;
+          const finalTime = nativeSlip?.time || ocrParsed?.time || timeStr;
+          const finalSender = ocrParsed?.sender || nativeSlip?.sender || 'บัญชีของฉัน';
 
-          // Create small thumbnail to store locally
-          let thumbnail = '';
-          try {
-            const thumbCanvas = document.createElement('canvas');
-            const thumbWidth = 240;
-            const thumbHeight = Math.round((height * thumbWidth) / width);
-            thumbCanvas.width = thumbWidth;
-            thumbCanvas.height = thumbHeight;
-            const tCtx = thumbCanvas.getContext('2d');
-            tCtx.drawImage(canvas, 0, 0, thumbWidth, thumbHeight);
-            thumbnail = thumbCanvas.toDataURL('image/jpeg', 0.6);
-          } catch {
-            // thumbnail fallback
+          let thumbnail = nativeSlip?.slipThumbnail || '';
+          if (!thumbnail) {
+            try {
+              const thumbCanvas = document.createElement('canvas');
+              const thumbWidth = 240;
+              const thumbHeight = Math.round((height * thumbWidth) / width);
+              thumbCanvas.width = thumbWidth;
+              thumbCanvas.height = thumbHeight;
+              const tCtx = thumbCanvas.getContext('2d');
+              tCtx.drawImage(canvas, 0, 0, thumbWidth, thumbHeight);
+              thumbnail = thumbCanvas.toDataURL('image/jpeg', 0.65);
+            } catch {
+              // thumbnail fallback
+            }
           }
 
           const finalCategory = matchCategory(finalPayee, '', merchantRules, categories);
@@ -212,8 +238,8 @@ export async function parseSlipImage(file, merchantRules = {}, categories = []) 
               slipThumbnail: thumbnail,
               isManual: false,
               rawFilename: file.name,
-              ocrConfidence: ocrParsed?.amount ? 'high' : 'medium',
-              rawOcrText: ocrRes?.text || ''
+              ocrConfidence: (nativeSlip?.amount || ocrParsed?.amount) ? 'high' : 'medium',
+              rawOcrText
             }
           });
         } catch (err) {
@@ -239,13 +265,13 @@ export async function parseSlipImage(file, merchantRules = {}, categories = []) 
 
 function getSuggestedPayee(filename = '', bankId = 'KBANK') {
   const bankNames = {
-    KBANK: 'ร้านค้าพร้อมเพย์ (K PLUS)',
-    SCB: 'สแกนจ่าย QR (SCB EASY)',
-    KTB: 'ร้านค้าถุงเงิน (เป๋าตัง)',
-    BAY: 'ร้านค้าพร้อมเพย์ (KMA)',
-    TTB: 'สแกน QR ร้านค้า (ttb)',
+    KBANK: 'โอนจ่าย K PLUS',
+    SCB: 'โอนจ่าย SCB EASY',
+    KTB: 'โอนจ่าย Krungthai NEXT',
+    BAY: 'โอนจ่าย KMA กรุงศรี',
+    TTB: 'โอนจ่าย ttb touch',
     MAKE: 'Cloud Pocket ชำระเงิน',
-    DIME: 'ร้านค้า KKP พร้อมเพย์',
+    DIME: 'โอนจ่าย Dime!',
     TRUEMONEY: 'TrueMoney สแกนจ่าย'
   };
   return bankNames[bankId] || 'โอนจ่ายสแกน QR';

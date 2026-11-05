@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import SummaryCards from '../components/SummaryCards';
 import GoatWidget from '../components/GoatWidget';
 import TransactionItem from '../components/TransactionItem';
-import { Camera, Plus, Sparkles, Filter, ChevronRight, Receipt, Zap, Loader2, Calendar, ArrowRight } from 'lucide-react';
+import { Camera, Plus, Sparkles, Receipt, Zap, Loader2, Calendar } from 'lucide-react';
 import { sound } from '../utils/sound';
 import { SAMPLE_TEST_SLIPS } from '../utils/slipParser';
 
@@ -21,9 +21,8 @@ export default function HomeView({
   onResetMonth,
   onAddTransaction
 }) {
-  const [filterPeriod, setFilterPeriod] = useState('all');
+  const [viewScope, setViewScope] = useState('month'); // 'month' | 'all'
 
-  // Filter transactions for current month
   const curYear = currentDate.getFullYear();
   const curMonth = currentDate.getMonth() + 1;
   const monthPrefix = `${curYear}-${curMonth.toString().padStart(2, '0')}`;
@@ -32,12 +31,16 @@ export default function HomeView({
     return tx.date && tx.date.startsWith(monthPrefix);
   });
 
+  // Smart fallback: if current month has 0 items, but user has items in other months, show all automatically
+  const effectiveScope = (viewScope === 'all' || (monthTxs.length === 0 && transactions.length > 0)) ? 'all' : 'month';
+  const displayedTxs = effectiveScope === 'all' ? transactions : monthTxs;
+
   // Calculate totals
-  const totalAmount = monthTxs.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+  const totalAmount = displayedTxs.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
   const now = new Date();
   const isCurrentMonthNow = now.getFullYear() === curYear && (now.getMonth() + 1) === curMonth;
   const daysPassed = isCurrentMonthNow ? Math.max(1, now.getDate()) : new Date(curYear, curMonth, 0).getDate();
-  const dailyAverage = totalAmount / daysPassed;
+  const dailyAverage = totalAmount / Math.max(1, daysPassed);
 
   // Group transactions by date
   const groupedByDate = {};
@@ -46,7 +49,7 @@ export default function HomeView({
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayStr = yesterday.toISOString().split('T')[0];
 
-  monthTxs.forEach(tx => {
+  displayedTxs.forEach(tx => {
     const d = tx.date || todayStr;
     if (!groupedByDate[d]) {
       groupedByDate[d] = [];
@@ -59,9 +62,13 @@ export default function HomeView({
   const formatDateHeader = (dateStr) => {
     if (dateStr === todayStr) return 'วันนี้';
     if (dateStr === yesterdayStr) return 'เมื่อวาน';
-    const [y, m, d] = dateStr.split('-');
+    const parts = dateStr.split('-');
+    if (parts.length !== 3) return dateStr;
+    const [y, m, d] = parts;
     const thaiMonthsShort = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
-    return `${parseInt(d, 10)} ${thaiMonthsShort[parseInt(m, 10) - 1]}`;
+    const mIdx = Math.max(0, Math.min(11, parseInt(m, 10) - 1));
+    const yearBE = (parseInt(y, 10) + 543).toString().slice(-2);
+    return `${parseInt(d, 10)} ${thaiMonthsShort[mIdx]} ${yearBE}`;
   };
 
   const formatBaht = (num) => {
@@ -72,51 +79,55 @@ export default function HomeView({
   };
 
   return (
-    <div className="space-y-4 pb-20 animate-fade-in">
-      {/* Goat Interactive Card */}
-      <GoatWidget
-        goatState={goatState}
-        onFeedGoat={onFeedGoat}
-        onOpenGoatRoom={onOpenGoatRoom}
-      />
-
-      {/* Warning banner if viewing different month */}
+    <div className="space-y-3 pb-24 animate-fade-in">
+      {/* Compact Month Warning Pill if user navigated away from current month */}
       {!isCurrentMonthNow && (
         <div
           onClick={() => {
             sound.playPop();
             if (onResetMonth) onResetMonth();
           }}
-          className="p-3 rounded-2xl bg-amber-500 text-white font-bold text-xs flex items-center justify-between shadow-xs cursor-pointer active:scale-98 transition-all hover:bg-amber-600"
+          className="px-3.5 py-2 rounded-2xl bg-amber-500 text-white font-bold text-xs flex items-center justify-between shadow-2xs cursor-pointer active:scale-98 transition-all hover:bg-amber-600"
         >
-          <div className="flex items-center gap-2">
-            <Calendar className="w-4 h-4 shrink-0" />
-            <span>กำลังดูยอดของเดือนอื่น ({curMonth}/{curYear + 543})</span>
+          <div className="flex items-center gap-1.5">
+            <Calendar className="w-3.5 h-3.5 shrink-0" />
+            <span>กำลังดูเดือน {curMonth}/{curYear + 543}</span>
           </div>
-          <span className="bg-white/20 px-2.5 py-1 rounded-xl text-[11px] font-extrabold flex items-center gap-1">
+          <span className="bg-white/25 px-2 py-0.5 rounded-lg text-[10px] font-extrabold">
             กลับเดือนปัจจุบัน ↩
           </span>
         </div>
       )}
 
-      {/* Monthly Summary Cards */}
+      {/* Hero Summary Card */}
       <SummaryCards
         totalAmount={totalAmount}
         dailyAverage={dailyAverage}
-        count={monthTxs.length}
+        count={displayedTxs.length}
+        totalAllTimeCount={transactions.length}
         currentDay={daysPassed}
+        titleLabel={effectiveScope === 'all' && monthTxs.length === 0 && transactions.length > 0
+          ? 'ยอดใช้จ่ายรวมทั้งหมด'
+          : 'ยอดใช้จ่ายรวมเดือนนี้'}
       />
 
-      {/* Primary Action Buttons */}
+      {/* Compact Goat Mascot Status Card */}
+      <GoatWidget
+        goatState={goatState}
+        onFeedGoat={onFeedGoat}
+        onOpenGoatRoom={onOpenGoatRoom}
+      />
+
+      {/* Primary Action Bar */}
       <div className="space-y-2">
-        {/* Main Auto-Scan Button (อ่านสลิปในเครื่องเองอัตโนมัติ) */}
+        {/* Main Auto-Scan Button */}
         <button
           onClick={() => {
             sound.playPop();
             onTriggerAutoScan();
           }}
           disabled={isAutoScanning}
-          className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-600 to-orange-500 hover:from-amber-600 hover:to-orange-600 active:scale-98 text-white font-extrabold text-sm shadow-md shadow-amber-500/25 flex items-center justify-between transition-all"
+          className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 active:scale-98 text-white font-extrabold text-sm shadow-md shadow-amber-500/20 flex items-center justify-between transition-all"
         >
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
@@ -127,29 +138,29 @@ export default function HomeView({
               )}
             </div>
             <div className="text-left">
-              <div className="leading-tight text-sm font-black">
+              <div className="leading-tight text-xs sm:text-sm font-black">
                 {isAutoScanning ? 'กำลังกวาดหารูปสลิปในเครื่อง...' : 'กวาดอ่านสลิปอัตโนมัติ ⚡'}
               </div>
-              <div className="text-[10px] text-amber-100 font-normal">
-                อ่านรูปสลิปในอัลบั้มเอง ไม่ต้องคอยกดเลือกรูป
+              <div className="text-[10px] text-amber-100 font-medium">
+                ค้นหาสลิปธนาคารในอัลบั้มเครื่องทันที ไม่ต้องเลือกรูปเอง
               </div>
             </div>
           </div>
-          <span className="text-[11px] font-bold bg-white/20 px-2.5 py-1 rounded-xl shrink-0">
-            {isAutoScanning ? 'ค้นหา...' : 'กวาดเลย'}
+          <span className="text-[11px] font-extrabold bg-white/25 px-2.5 py-1 rounded-xl shrink-0">
+            {isAutoScanning ? 'รอสักครู่...' : 'กวาดเลย'}
           </span>
         </button>
 
-        {/* Secondary options: Pick files manually or Manual Cash */}
+        {/* Secondary Options: Pick Slip Image, Manual Cash, or Quick Test */}
         <div className="grid grid-cols-2 gap-2">
           <button
             onClick={() => {
               sound.playPop();
               onOpenScanModal();
             }}
-            className="py-2.5 px-3 rounded-xl bg-white hover:bg-neutral-50 active:scale-98 border border-neutral-200/80 text-neutral-700 font-bold text-xs shadow-2xs flex items-center justify-center gap-1.5 transition-all"
+            className="py-2.5 px-3 rounded-xl bg-white hover:bg-neutral-50 active:scale-98 border border-neutral-200/90 text-neutral-800 font-bold text-xs shadow-2xs flex items-center justify-center gap-1.5 transition-all"
           >
-            <Camera className="w-3.5 h-3.5 text-neutral-500" />
+            <Camera className="w-3.5 h-3.5 text-amber-600" />
             <span>เลือกรูปสลิปเอง</span>
           </button>
 
@@ -158,123 +169,132 @@ export default function HomeView({
               sound.playPop();
               onOpenManualModal();
             }}
-            className="py-2.5 px-3 rounded-xl bg-white hover:bg-neutral-50 active:scale-98 border border-neutral-200/80 text-neutral-700 font-bold text-xs shadow-2xs flex items-center justify-center gap-1.5 transition-all"
+            className="py-2.5 px-3 rounded-xl bg-white hover:bg-neutral-50 active:scale-98 border border-neutral-200/90 text-neutral-800 font-bold text-xs shadow-2xs flex items-center justify-center gap-1.5 transition-all"
           >
-            <Plus className="w-3.5 h-3.5 text-neutral-500" />
+            <Plus className="w-3.5 h-3.5 text-emerald-600" />
             <span>จดเงินสด</span>
           </button>
         </div>
       </div>
 
-      {/* Transactions Section Header */}
-      <div className="pt-2">
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="font-extrabold text-sm text-neutral-900 tracking-tight flex items-center gap-1.5">
-            <Receipt className="w-4 h-4 text-neutral-500" />
-            รายการรายจ่ายเดือนนี้
+      {/* Transactions Section */}
+      <div className="pt-1">
+        <div className="flex items-center justify-between mb-2.5">
+          <h3 className="font-extrabold text-xs sm:text-sm text-neutral-900 tracking-tight flex items-center gap-1.5">
+            <Receipt className="w-4 h-4 text-amber-600" />
+            <span>รายการใช้จ่าย</span>
           </h3>
-          <span className="text-xs text-neutral-400 font-medium">
-            {monthTxs.length} รายการ
-          </span>
+
+          {/* Segmented Scope Filter: เดือนนี้ vs ทั้งหมด */}
+          <div className="flex items-center bg-neutral-200/70 p-0.5 rounded-xl text-[11px] font-bold">
+            <button
+              type="button"
+              onClick={() => {
+                sound.playPop();
+                setViewScope('month');
+              }}
+              className={`px-2.5 py-1 rounded-lg transition-all ${
+                effectiveScope === 'month'
+                  ? 'bg-white text-neutral-900 shadow-2xs'
+                  : 'text-neutral-500 hover:text-neutral-800'
+              }`}
+            >
+              เดือนนี้ ({monthTxs.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                sound.playPop();
+                setViewScope('all');
+              }}
+              className={`px-2.5 py-1 rounded-lg transition-all ${
+                effectiveScope === 'all'
+                  ? 'bg-white text-neutral-900 shadow-2xs'
+                  : 'text-neutral-500 hover:text-neutral-800'
+              }`}
+            >
+              ทั้งหมด ({transactions.length})
+            </button>
+          </div>
         </div>
 
-        {/* Empty state */}
+        {/* Empty State */}
         {sortedDates.length === 0 ? (
-          <div className="py-10 px-5 rounded-3xl bg-white border border-neutral-200/80 text-center space-y-4">
-            <div className="w-16 h-16 mx-auto rounded-3xl bg-amber-100/60 text-amber-600 flex items-center justify-center text-3xl">
+          <div className="py-8 px-4 rounded-3xl bg-white border border-neutral-200/80 text-center space-y-3 shadow-2xs">
+            <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-100/70 text-amber-600 flex items-center justify-center text-2xl">
               🐐
             </div>
             <div>
               <h4 className="font-extrabold text-neutral-800 text-sm mb-1">
-                {!isCurrentMonthNow ? `ไม่มีรายการในเดือน ${curMonth}/${curYear + 543}` : 'ยังไม่มีรายการในเดือนนี้'}
+                ยังไม่มีรายการสลิปในเดือนนี้
               </h4>
-              <p className="text-xs text-neutral-500 max-w-xs mx-auto">
-                {!isCurrentMonthNow
-                  ? 'คุณกำลังเลือกดูเดือนอื่นอยู่ แตะปุ่มด้านล่างเพื่อกลับมาดูเดือนปัจจุบัน'
-                  : 'เลือกรูปสลิปจากอัลบั้มเพื่ออ่านยอดจริง หรือลองกดสลิปตัวอย่างเพื่อดูการทำงาน'}
+              <p className="text-xs text-neutral-500 max-w-xs mx-auto leading-relaxed">
+                แตะปุ่ม <b>กวาดอ่านสลิปอัตโนมัติ</b> ด้านบน หรือเลือกรูปสลิปจากเครื่องเพื่ออ่านยอดจริงทันที
               </p>
             </div>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pt-1">
-              {!isCurrentMonthNow ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    sound.playPop();
-                    if (onResetMonth) onResetMonth();
-                  }}
-                  className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-amber-500 text-white font-extrabold text-xs shadow-xs hover:bg-amber-600 active:scale-95 transition-all"
-                >
-                  <Calendar className="w-4 h-4" />
-                  กลับมาเดือนปัจจุบัน (พ.ย. 2569) ↩
-                </button>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      sound.playPop();
-                      onOpenScanModal();
-                    }}
-                    className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-amber-500 text-white font-extrabold text-xs shadow-xs hover:bg-amber-600 active:scale-95 transition-all"
-                  >
-                    <Camera className="w-4 h-4" />
-                    เลือกรูปสลิปจากเครื่อง
-                  </button>
+              <button
+                type="button"
+                onClick={() => {
+                  sound.playPop();
+                  onOpenScanModal();
+                }}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-neutral-900 text-white font-extrabold text-xs shadow-xs hover:bg-neutral-800 active:scale-95 transition-all"
+              >
+                <Camera className="w-3.5 h-3.5 text-amber-400" />
+                เลือกรูปสลิปจากอัลบั้ม
+              </button>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      sound.playPop();
-                      const sample = SAMPLE_TEST_SLIPS[Math.floor(Math.random() * SAMPLE_TEST_SLIPS.length)];
-                      const rnd = Math.floor(100000 + Math.random() * 900000);
-                      const d = new Date();
-                      const todayStr = d.toISOString().split('T')[0];
-                      if (onAddTransaction) {
-                        onAddTransaction({
-                          id: 'tx_sample_' + Date.now(),
-                          date: todayStr,
-                          time: sample.time || '12:30',
-                          timestamp: Date.now(),
-                          amount: sample.amount,
-                          bankId: sample.bankId,
-                          payee: sample.payee,
-                          sender: sample.sender,
-                          categoryId: sample.categoryId,
-                          ref: `${sample.bankId}${rnd}`,
-                          note: sample.note + ' (ตัวอย่างทดสอบ)',
-                          isManual: false,
-                        });
-                      }
-                    }}
-                    className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-bold text-xs active:scale-95 transition-all"
-                  >
-                    <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                    ลองเพิ่มสลิปตัวอย่าง (1-Click)
-                  </button>
-                </>
-              )}
+              <button
+                type="button"
+                onClick={() => {
+                  sound.playPop();
+                  const sample = SAMPLE_TEST_SLIPS[Math.floor(Math.random() * SAMPLE_TEST_SLIPS.length)];
+                  const rnd = Math.floor(100000 + Math.random() * 900000);
+                  const d = new Date();
+                  const todayStr = d.toISOString().split('T')[0];
+                  if (onAddTransaction) {
+                    onAddTransaction({
+                      id: 'tx_sample_' + Date.now(),
+                      date: todayStr,
+                      time: sample.time || '12:30',
+                      timestamp: Date.now(),
+                      amount: sample.amount,
+                      bankId: sample.bankId,
+                      payee: sample.payee,
+                      sender: sample.sender,
+                      categoryId: sample.categoryId,
+                      ref: `${sample.bankId}${rnd}`,
+                      note: sample.note + ' (สลิปทดสอบ)',
+                      isManual: false,
+                    });
+                  }
+                }}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 font-bold text-xs active:scale-95 transition-all"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                จำลองสลิปเข้า 1 ใบ (ทดสอบ)
+              </button>
             </div>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3.5">
             {sortedDates.map((dateStr) => {
               const dayTxs = groupedByDate[dateStr];
               const dayTotal = dayTxs.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
 
               return (
                 <div key={dateStr} className="space-y-2">
-                  {/* Date Sticky Header */}
                   <div className="flex items-center justify-between px-1 text-xs text-neutral-500">
                     <span className="font-bold text-neutral-700">
-                      {formatDateHeader(dateStr)} ({dateStr})
+                      {formatDateHeader(dateStr)}
                     </span>
-                    <span className="font-mono text-neutral-400 font-medium">
-                      รวม ฿{formatBaht(dayTotal)}
+                    <span className="font-mono text-neutral-500 font-semibold">
+                      รวม -฿{formatBaht(dayTotal)}
                     </span>
                   </div>
 
-                  {/* Transactions of the day */}
                   <div className="space-y-2">
                     {dayTxs.map((tx) => (
                       <TransactionItem

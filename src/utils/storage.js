@@ -85,6 +85,15 @@ export const SAMPLE_INITIAL_TRANSACTIONS = [
   }
 ];
 
+export const CLEAN_GOAT_STATE = {
+  name: 'น้องปิ๊กมี่',
+  streakDays: 0,
+  lastFedDate: '',
+  totalSlipsEaten: 0,
+  hungerLevel: 50,
+  mood: 'hungry',
+};
+
 export const Storage = {
   // --- Transactions ---
   getTransactions() {
@@ -185,14 +194,7 @@ export const Storage = {
     } catch {
       // fallback
     }
-    return {
-      name: 'น้องปิ๊กมี่',
-      streakDays: 4,
-      lastFedDate: new Date().toISOString().split('T')[0],
-      totalSlipsEaten: 18,
-      hungerLevel: 90, // 0 - 100
-      mood: 'happy', // 'hungry' | 'happy' | 'super'
-    };
+    return { ...CLEAN_GOAT_STATE };
   },
 
   saveGoatState(state) {
@@ -244,8 +246,24 @@ export const Storage = {
   },
 
   clearAllData() {
-    localStorage.removeItem(STORAGE_KEYS.TRANSACTIONS);
-    localStorage.removeItem(STORAGE_KEYS.MERCHANT_RULES);
-    localStorage.removeItem(STORAGE_KEYS.GOAT_STATE);
+    try {
+      localStorage.clear();
+      sessionStorage.clear();
+    } catch (e) {
+      console.warn('Storage clear error:', e);
+    }
+    localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEYS.MERCHANT_RULES, JSON.stringify({}));
+    localStorage.setItem(STORAGE_KEYS.GOAT_STATE, JSON.stringify(CLEAN_GOAT_STATE));
+  },
+
+  resetEntireApp() {
+    this.clearAllData();
+    return {
+      transactions: [],
+      categories: DEFAULT_CATEGORIES,
+      merchantRules: {},
+      goatState: { ...CLEAN_GOAT_STATE },
+    };
   }
 };

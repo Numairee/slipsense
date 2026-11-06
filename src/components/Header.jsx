@@ -50,7 +50,7 @@ export default function Header({
               </span>
             </div>
             <p className="text-[10px] text-neutral-500 font-medium mt-0.5">
-              จดรายจ่ายแบบไม่จด • Offline 100%
+              จดรายจ่ายแบบไม่จด • On-Device ออฟไลน์
             </p>
           </div>
         </div>

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import SummaryCards from '../components/SummaryCards';
 import GoatWidget from '../components/GoatWidget';
 import TransactionItem from '../components/TransactionItem';
-import { Camera, Plus, Sparkles, Receipt, Zap, Loader2, Calendar, RefreshCw } from 'lucide-react';
+import { Camera, Plus, Sparkles, Receipt, Zap, Loader2, Calendar, RefreshCw, Trash2 } from 'lucide-react';
 import { sound } from '../utils/sound';
 import { SAMPLE_TEST_SLIPS } from '../utils/slipParser';
 
@@ -14,6 +14,7 @@ export default function HomeView({
   isAutoScanning,
   onTriggerAutoScan,
   onClearAndRescan,
+  onOpenResetModal,
   onOpenScanModal,
   onOpenManualModal,
   onOpenDetailModal,
@@ -187,15 +188,18 @@ export default function HomeView({
           </h3>
 
           <div className="flex items-center gap-1.5">
-            {transactions.length > 0 && onClearAndRescan && (
+            {transactions.length > 0 && onOpenResetModal && (
               <button
                 type="button"
-                onClick={onClearAndRescan}
-                title="ล้างรายการทั้งหมดแล้วกวาดเฉพาะสลิปจริงใหม่"
-                className="px-2 py-1 rounded-xl bg-neutral-100 hover:bg-neutral-200/80 active:scale-95 text-neutral-600 font-bold text-[10px] flex items-center gap-1 border border-neutral-200 transition-all"
+                onClick={() => {
+                  sound.playPop();
+                  onOpenResetModal();
+                }}
+                title="ล้างข้อมูลแอปทั้งหมดหรือสแกนใหม่"
+                className="px-2.5 py-1 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 active:scale-95 font-bold text-[10px] flex items-center gap-1 border border-rose-200/80 transition-all shadow-2xs"
               >
-                <RefreshCw className="w-3 h-3 text-neutral-500" />
-                <span>ล้าง & สแกนใหม่</span>
+                <Trash2 className="w-3 h-3 text-rose-600" />
+                <span>ล้างแอป</span>
               </button>
             )}
 

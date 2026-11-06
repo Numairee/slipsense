@@ -8,9 +8,12 @@ import { sound } from '../utils/sound';
 export default function SettingsView({
   categories,
   merchantRules,
+  autoScanOnStartup,
+  onToggleAutoScanOnStartup,
   onExportCSV,
   onExportBackup,
   onImportBackup,
+  onOpenResetModal,
   onClearAllData,
   onClearAndRescan,
   onClearMerchantRules,
@@ -196,46 +199,75 @@ export default function SettingsView({
         </div>
       </div>
 
-      {/* Re-Scan & Reset Action */}
-      {onClearAndRescan && (
-        <div className="bg-white rounded-3xl p-4 border border-neutral-200/80 shadow-xs space-y-2">
-          <div className="flex items-center justify-between">
-            <h4 className="font-extrabold text-xs text-amber-700 uppercase tracking-wide flex items-center gap-1.5">
-              <RefreshCw className="w-3.5 h-3.5 text-amber-600" />
-              <span>รีเซ็ต & กวาดสแกนสลิปใหม่</span>
-            </h4>
-          </div>
-          <p className="text-xs text-neutral-500 leading-relaxed">
-            หากมีรูปที่ไม่ใช่สลิปปะปน หรือต้องการคัดกรองเฉพาะสลิปโอนเงินจริงใหม่ทั้งหมด สามารถกดปุ่มนี้เพื่อเริ่มใหม่ได้ทันที
-          </p>
-          <button
-            onClick={() => {
-              sound.playPop();
-              onClearAndRescan();
-            }}
-            className="w-full py-2.5 px-4 rounded-xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold transition-all active:scale-98 flex items-center justify-center gap-1.5"
-          >
-            <RefreshCw className="w-4 h-4 text-amber-700" />
-            ล้างรายการเก่าแล้วสแกนสลิปใหม่ทั้งหมด
-          </button>
-        </div>
-      )}
-
-      {/* Danger Zone: Clear Data */}
-      <div className="bg-white rounded-3xl p-4 border border-neutral-200/80 shadow-xs">
-        <h4 className="font-extrabold text-xs text-rose-600 uppercase tracking-wide mb-2">
-          ล้างข้อมูลทั้งหมด
+      {/* Preferences Section */}
+      <div className="bg-white rounded-3xl p-4 border border-neutral-200/80 shadow-xs space-y-3">
+        <h4 className="font-extrabold text-xs text-neutral-900 uppercase tracking-wide">
+          การทำงานของระบบ
         </h4>
 
-        {showConfirmClear ? (
-          <div className="p-3 bg-rose-50 rounded-2xl border border-rose-200 flex flex-col gap-2">
+        <div className="flex items-center justify-between p-3 rounded-2xl bg-neutral-50 border border-neutral-200/70">
+          <div>
+            <h5 className="font-bold text-xs text-neutral-900">
+              สแกนสลิปอัตโนมัติเมื่อเปิดแอป
+            </h5>
+            <p className="text-[11px] text-neutral-500">
+              {autoScanOnStartup
+                ? 'เปิดใช้งาน: ค้นหาสลิปใหม่ทันทีที่เข้าแอป'
+                : 'ปิดใช้งาน: สแกนเฉพาะเมื่อกดปุ่มบนหน้าแรกเท่านั้น (แนะนำ)'}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              sound.playPop();
+              if (onToggleAutoScanOnStartup) onToggleAutoScanOnStartup();
+            }}
+            className={`w-12 h-6.5 rounded-full transition-colors p-1 flex items-center shrink-0 ${
+              autoScanOnStartup ? 'bg-amber-500 justify-end' : 'bg-neutral-300 justify-start'
+            }`}
+          >
+            <div className="w-4.5 h-4.5 rounded-full bg-white shadow-xs" />
+          </button>
+        </div>
+      </div>
+
+      {/* Danger Zone: Clear App / Reset Data */}
+      <div className="bg-rose-50/70 rounded-3xl p-4 border border-rose-200/90 shadow-xs space-y-2.5">
+        <div className="flex items-center justify-between">
+          <h4 className="font-extrabold text-xs text-rose-700 uppercase tracking-wide flex items-center gap-1.5">
+            <Trash2 className="w-4 h-4 text-rose-600" />
+            <span>ล้างข้อมูลแอป (Reset App)</span>
+          </h4>
+        </div>
+
+        <p className="text-xs text-rose-900/80 leading-relaxed">
+          ลบรายการสลิปและประวัติรายจ่ายทั้งหมด รีเซ็ตกฎร้านค้า และตั้งค่าน้องปิ๊กมี่กลับสู่สภาพเริ่มต้นเหมือนเพิ่งติดตั้งใหม่
+        </p>
+
+        <button
+          onClick={() => {
+            sound.playPop();
+            if (onOpenResetModal) {
+              onOpenResetModal();
+            } else {
+              setShowConfirmClear(true);
+            }
+          }}
+          className="w-full py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-98 text-white text-xs font-bold transition-all shadow-sm shadow-rose-600/20 flex items-center justify-center gap-1.5"
+        >
+          <Trash2 className="w-4 h-4" />
+          <span>ล้างแอปทั้งหมด (Reset App)</span>
+        </button>
+
+        {showConfirmClear && (
+          <div className="p-3 bg-white rounded-2xl border border-rose-300 flex flex-col gap-2 mt-2 animate-fade-in">
             <span className="text-xs font-bold text-rose-800">
               ⚠️ แน่ใจหรือไม่? ข้อมูลรายจ่ายทั้งหมดจะถูกลบและกู้คืนไม่ได้
             </span>
             <div className="flex gap-2">
               <button
                 onClick={() => setShowConfirmClear(false)}
-                className="flex-1 py-1.5 text-xs text-neutral-600 bg-white border border-neutral-200 rounded-xl"
+                className="flex-1 py-1.5 text-xs text-neutral-600 bg-neutral-100 hover:bg-neutral-200 rounded-xl"
               >
                 ยกเลิก
               </button>
@@ -245,20 +277,12 @@ export default function SettingsView({
                   onClearAllData();
                   setShowConfirmClear(false);
                 }}
-                className="flex-1 py-1.5 text-xs font-bold text-white bg-rose-600 rounded-xl"
+                className="flex-1 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl"
               >
-                ยืนยันลบทั้งหมด
+                ยืนยันล้างทั้งหมด
               </button>
             </div>
           </div>
-        ) : (
-          <button
-            onClick={() => setShowConfirmClear(true)}
-            className="w-full py-2.5 px-4 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
-          >
-            <Trash2 className="w-4 h-4" />
-            ล้างข้อมูลทั้งหมดในเครื่อง
-          </button>
         )}
       </div>
 

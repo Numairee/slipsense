@@ -11,6 +11,7 @@ import SettingsView from './views/SettingsView';
 import ScanModal from './components/ScanModal';
 import ManualAddModal from './components/ManualAddModal';
 import SlipDetailModal from './components/SlipDetailModal';
+import ResetAppModal from './components/ResetAppModal';
 import { Storage } from './utils/storage';
 import { exportTransactionsToCSV } from './utils/csvExporter';
 import { sound } from './utils/sound';
@@ -28,9 +29,13 @@ export default function App() {
   // Modals & Feedback
   const [isScanOpen, setIsScanOpen] = useState(false);
   const [isManualOpen, setIsManualOpen] = useState(false);
+  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [activeDetailTx, setActiveDetailTx] = useState(null);
   const [isAutoScanning, setIsAutoScanning] = useState(false);
   const [scanToast, setScanToast] = useState(null);
+  const [autoScanOnStartup, setAutoScanOnStartup] = useState(() => {
+    return localStorage.getItem('pygmy_auto_scan_on_launch') === 'true';
+  });
 
   const syncMonthToLatestSlip = (slips = []) => {
     if (!slips || slips.length === 0) return;
@@ -110,10 +115,19 @@ export default function App() {
     }
   };
 
-  // Auto-Scan in background on app startup (just like Pygmy iOS)
+  const handleToggleAutoScanOnStartup = () => {
+    setAutoScanOnStartup(prev => {
+      const next = !prev;
+      localStorage.setItem('pygmy_auto_scan_on_launch', String(next));
+      return next;
+    });
+  };
+
+  // Auto-Scan in background on app startup (only if enabled by user in settings)
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (AutoScanner.isNative()) {
+      const isEnabled = localStorage.getItem('pygmy_auto_scan_on_launch') === 'true';
+      if (AutoScanner.isNative() && isEnabled) {
         handleTriggerAutoScan(true);
       }
     }, 1500);
@@ -199,12 +213,22 @@ export default function App() {
     return success;
   };
 
-  // Clear data
-  const handleClearAll = () => {
-    Storage.clearAllData();
-    setTransactions([]);
-    setMerchantRules({});
-    setGoatState(Storage.getGoatState());
+  // Clear and reset entire app
+  const handleResetEntireApp = () => {
+    const clean = Storage.resetEntireApp();
+    setTransactions(clean.transactions);
+    setCategories(clean.categories);
+    setMerchantRules(clean.merchantRules);
+    setGoatState(clean.goatState);
+    setCurrentDate(new Date());
+    setActiveTab('home');
+
+    sound.playPop();
+    setScanToast({
+      title: 'ล้างข้อมูลแอปเรียบร้อยแล้ว 🧹',
+      message: 'ลบรายการสลิปทั้งหมดและรีเซ็ตแอปสู่สถานะเริ่มต้นเรียบร้อยแล้ว'
+    });
+    setTimeout(() => setScanToast(null), 4000);
   };
 
   // Clear all and re-scan fresh from device gallery
@@ -299,6 +323,7 @@ export default function App() {
             isAutoScanning={isAutoScanning}
             onTriggerAutoScan={() => handleTriggerAutoScan(false)}
             onClearAndRescan={handleClearAndRescan}
+            onOpenResetModal={() => setIsResetModalOpen(true)}
             onOpenScanModal={() => setIsScanOpen(true)}
             onOpenManualModal={() => setIsManualOpen(true)}
             onOpenDetailModal={(tx) => setActiveDetailTx(tx)}
@@ -338,10 +363,13 @@ export default function App() {
           <SettingsView
             categories={categories}
             merchantRules={merchantRules}
+            autoScanOnStartup={autoScanOnStartup}
+            onToggleAutoScanOnStartup={handleToggleAutoScanOnStartup}
             onExportCSV={handleExportCSV}
             onExportBackup={handleExportBackup}
             onImportBackup={handleImportBackup}
-            onClearAllData={handleClearAll}
+            onOpenResetModal={() => setIsResetModalOpen(true)}
+            onClearAllData={handleResetEntireApp}
             onClearAndRescan={handleClearAndRescan}
             onClearMerchantRules={handleClearMerchantRules}
           />
@@ -349,6 +377,14 @@ export default function App() {
       </main>
 
       {/* Modals */}
+      <ResetAppModal
+        isOpen={isResetModalOpen}
+        onClose={() => setIsResetModalOpen(false)}
+        onConfirmReset={handleResetEntireApp}
+        onClearAndRescan={handleClearAndRescan}
+        transactionsCount={transactions.length}
+      />
+
       <ScanModal
         isOpen={isScanOpen}
         onClose={() => setIsScanOpen(false)}

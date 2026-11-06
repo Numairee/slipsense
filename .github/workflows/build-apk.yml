@@ -1,13 +1,14 @@
-name: Build Android APK for iQOO 15
+name: Build & Release SlipSense Android APK
 
 on:
   push:
     branches: [ main ]
+    tags: [ 'v*' ]
   workflow_dispatch:
 
 jobs:
   build-apk:
-    name: Build Pygmy APK
+    name: Build SlipSense APK
     runs-on: ubuntu-latest
 
     steps:
@@ -41,40 +42,48 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x android/gradlew
 
-      - name: Build APK with Gradle
+      - name: Build Release APK with Gradle
         run: |
           cd android
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleRelease --no-daemon
 
-      - name: Rename APK for iQOO 15
+      - name: Prepare Release APK Artifact
         run: |
-          cp android/app/build/outputs/apk/debug/app-debug.apk android/app/build/outputs/apk/debug/Pygmy-iQOO15.apk
+          cp android/app/build/outputs/apk/release/app-release.apk SlipSense-v2.0.0.apk
 
       - name: Upload APK to Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Pygmy-iQOO15-APK
-          path: android/app/build/outputs/apk/debug/Pygmy-iQOO15.apk
+          name: SlipSense-v2.0.0-APK
+          path: SlipSense-v2.0.0.apk
           retention-days: 30
 
       - name: Create GitHub Release with APK
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main'
         with:
-          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v1.0.2' }}
-          name: "Pygmy Android v1.0.2 (iQOO 15 Edition)"
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v2.0.0' }}
+          name: ${{ startsWith(github.ref, 'refs/tags/') && format('SlipSense {0} (Smart Slip & Wealth Intelligence)', github.ref_name) || 'SlipSense v2.0.0 (Smart Slip & Wealth Intelligence)' }}
           body: |
-            ## 📱 Pygmy: No-Track Tracker APK for Android / iQOO 15
-            - **เวอร์ชัน:** v1.0.2 (อัปเดตระบบตรวจสอบสลิปเข้มงวด, ปุ่มล้างแอป Reset App และสวิตช์ปิดสแกนอัตโนมัติ)
-            - **Target Phone:** iQOO 15 (Snapdragon 8 Elite, 144Hz AMOLED, OriginOS 5 / Android 15)
-            - **Architecture:** `arm64-v8a` (64-bit)
-            - **Core:** High-Performance Rust Core Engine
-            - **Privacy:** On-Device MediaStore Auto-Slip Scanner (ประมวลผลออฟไลน์ในเครื่อง ไม่ส่งออกภายนอก)
+            ## ⚡ SlipSense v2.0.0 — Smart Slip & Wealth Intelligence
+            **แอปบันทึกรายจ่ายจากสลิปธนาคารอัตโนมัติ พร้อมระบบวิเคราะห์การเงินอัจฉริยะในตัวเครื่อง 100%**
             
-            ### 📥 วิธีติดตั้ง:
-            1. ดาวน์โหลดไฟล์ `Pygmy-iQOO15.apk` ด้านล่างลงมือถือ
-            2. แตะเปิดไฟล์เพื่อติดตั้ง (อนุญาต Install Unknown Apps หากระบบถาม)
-            3. เปิดใช้งานได้ทันที ไม่ต้องต่อเน็ต
-          files: android/app/build/outputs/apk/debug/Pygmy-iQOO15.apk
+            ### ✨ ไฮไลท์การอัปเดตครั้งใหญ่ (Major Release):
+            - 🚀 **แก้ปัญหาตรวจพบ 0 สลิป:** แก้ไขอัลกอริทึม Downsampling ในระดับ Native (`GalleryScannerPlugin`) ป้องกันการหน่วงค้าง พร้อมปรับลดความละเอียดภาพให้ Google ML Kit อ่านค่าได้แม่นยำและรวดเร็ว
+            - 🔍 **แยกแยะธนาคารแม่นยำ:** รองรับสลิปธนาคารไทยครบทุกแห่ง (กสิกรไทย, ไทยพาณิชย์, กรุงไทย, กรุงเทพ, กรุงศรี, ทีทีบี, ออมสิน, ทรูมันนี่, ฯลฯ) พร้อมระบบตรวจจับคู่สีและ OCR ข้อความ
+            - 🛡️ **รูปจริงในเครื่องปลอดภัย 100%:** สแกนแบบ Read-Only ไม่มีการลบ ดัดแปลง หรือเคลื่อนย้ายรูปภาพในอัลบั้มเครื่อง
+            - 📊 **Financial Intelligence Engine:** แดชบอร์ดวิเคราะห์การเงินสไตล์ Dark Fintech (Revolut / Apple Card):
+              - คำนวณคะแนนสุขภาพการเงิน (Health Score 0–100, เกรด S/A/B/C/D)
+              - ระบบคาดการณ์ยอดใช้จ่ายสิ้นเดือน (Burn Rate & Month-End Forecast)
+              - เรดาร์ตรวจจับเงินรั่วไหล (Money Leaks Radar)
+              - วิเคราะห์ช่วงเวลาใช้เงิน และสัดส่วนเงินไหลออกจากแต่ละธนาคาร
+            - 🎯 **ระบบจัดการงบประมาณ (Budgets):** ตั้งงบรายหมวดและคำนวณเงินที่ใช้ได้ปลอดภัยต่อวัน (Daily Safe-to-Spend)
+            - 🧹 **ปุ่มล้างข้อมูลแอป (Reset App):** ล้างข้อมูลเฉพาะในตัวแอปได้ทันทีโดยไม่แตะต้องอัลบั้มรูปในมือถือ
+
+            ### 📥 วิธีติดตั้งลงมือถือ (Android / iQOO / Samsung / Xiaomi / Vivo):
+            1. ดาวน์โหลดไฟล์ `SlipSense-v2.0.0.apk` ด้านล่าง
+            2. แตะเปิดไฟล์เพื่อติดตั้ง (เลือก "อนุญาตให้ติดตั้งจากแหล่งนี้" หากระบบถาม)
+            3. ใช้งานได้ทันที 100% Offline ไม่ต้องต่อเน็ต ไม่มีการเก็บหรือส่งข้อมูลออกนอกเครื่อง
+          files: SlipSense-v2.0.0.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

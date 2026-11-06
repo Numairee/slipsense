@@ -42,6 +42,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -376,7 +377,7 @@ public class GalleryScannerPlugin extends Plugin {
 
         if (barcodeScanner != null) {
             try {
-                List<Barcode> barcodes = Tasks.await(barcodeScanner.process(inputImage));
+                List<Barcode> barcodes = Tasks.await(barcodeScanner.process(inputImage), 4, TimeUnit.SECONDS);
                 for (Barcode b : barcodes) {
                     String raw = b.getRawValue();
                     if (raw != null && !raw.isEmpty()) {
@@ -393,7 +394,7 @@ public class GalleryScannerPlugin extends Plugin {
         String ocrText = "";
         if (textRecognizer != null) {
             try {
-                Text visionText = Tasks.await(textRecognizer.process(inputImage));
+                Text visionText = Tasks.await(textRecognizer.process(inputImage), 6, TimeUnit.SECONDS);
                 ocrText = visionText.getText();
             } catch (Exception ignored) {}
         }

@@ -40,10 +40,13 @@ export const AutoScanner = {
    */
   async scanNativeGallery(existingTransactions = [], categories = [], merchantRules = {}) {
     try {
-      // Scan across all photo albums & bank folders (up to 500 images)
-      const res = await GalleryScanner.scanRecentSlips({
-        limit: 500
+      // Scan across all bank folders & recent screenshots with timeout protection
+      const timeoutPromise = new Promise(resolve => setTimeout(() => resolve({ success: true, slips: [], count: 0, timedOut: true }), 25000));
+      const scanPromise = GalleryScanner.scanRecentSlips({
+        limit: 300
       });
+
+      const res = await Promise.race([scanPromise, timeoutPromise]);
 
       if (!res) {
         return { success: true, newSlips: [], duplicatesCount: 0, totalScanned: 0 };

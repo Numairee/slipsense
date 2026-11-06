@@ -56,19 +56,19 @@ export default function SettingsView({
               No-Track Tracker Guarantee
             </h3>
             <span className="text-[11px] text-emerald-100 font-medium">
-              ความเป็นส่วนตัว 100% บนเครื่อง Android
+              บันทึกและประมวลผลบนเครื่องเท่านั้น
             </span>
           </div>
         </div>
 
         <p className="text-xs text-emerald-50 leading-relaxed mb-3">
-          ตามแนวคิดของ Pygmy ดั้งเดิม ข้อมูลสลิป ตัวเลขการเงิน และการประมวลผลทั้งหมดทำงานภายในเครื่องของคุณเท่านั้น (On-Device 100%) ไม่มีการส่งรูปหรือตัวเลขไปยังเซิร์ฟเวอร์ภายนอก ไม่มีโฆษณา และไม่มีระบบติดตามการใช้งานใดๆ ทั้งสิ้น
+          ตามแนวคิดของ Pygmy ข้อมูลสลิปและรายการทั้งหมดประมวลผลบนเครื่องของคุณเท่านั้น ไม่มีการส่งรูปหรือตัวเลขออกภายนอก ไม่มีเซิร์ฟเวอร์กลาง และไม่มีระบบติดตามการใช้งาน
         </p>
 
         <div className="grid grid-cols-3 gap-2 pt-2 border-t border-white/20 text-center text-[10px]">
           <div className="bg-white/10 rounded-xl p-1.5 backdrop-blur-xs">
-            <span className="font-bold block text-white">🔒 Offline 100%</span>
-            <span className="text-emerald-200">ไม่พึ่งพาเน็ต</span>
+            <span className="font-bold block text-white">🔒 On-Device</span>
+            <span className="text-emerald-200">ทำงานแบบออฟไลน์</span>
           </div>
           <div className="bg-white/10 rounded-xl p-1.5 backdrop-blur-xs">
             <span className="font-bold block text-white">🚫 No Server</span>
@@ -94,7 +94,7 @@ export default function SettingsView({
               ส่งออกไฟล์ CSV (สำหรับ Excel / AI)
             </h5>
             <p className="text-[11px] text-neutral-500">
-              รองรับภาษาไทย UTF-8 BOM เปิดใน Excel ได้ทันทีไม่เป็นภาษาต่างดาว
+              เข้ารหัส UTF-8 with BOM เปิดใน Excel หรือ Sheets ได้โดยสระไม่เพี้ยน
             </p>
           </div>
           <button
@@ -206,7 +206,7 @@ export default function SettingsView({
             </h4>
           </div>
           <p className="text-xs text-neutral-500 leading-relaxed">
-            หากมีรูปอื่นปะปน หรือต้องการให้ AI คัดกรองตรวจจับเฉพาะสลิปโอนเงินจริงจากเครื่องใหม่ทั้งหมด สามารถแตะปุ่มนี้เพื่อเริ่มใหม่แบบคลีนได้ทันที
+            หากมีรูปที่ไม่ใช่สลิปปะปน หรือต้องการคัดกรองเฉพาะสลิปโอนเงินจริงใหม่ทั้งหมด สามารถกดปุ่มนี้เพื่อเริ่มใหม่ได้ทันที
           </p>
           <button
             onClick={() => {
@@ -271,7 +271,7 @@ export default function SettingsView({
           แนวคิดจากแอป iOS <b>"Pygmy: จดรายจ่ายแบบไม่จด"</b> โดย Peerasak Unsakon
         </p>
         <p className="text-[10px] text-neutral-400">
-          ทำงานออฟไลน์ 100% • รองรับธนาคารไทยทุกแห่ง
+          ประมวลผลออฟไลน์ในเครื่อง • รองรับสลิปธนาคารไทย
         </p>
       </div>
     </div>

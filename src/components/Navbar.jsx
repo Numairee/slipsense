@@ -1,13 +1,13 @@
 import React from 'react';
-import { Home, PieChart, Receipt, Settings } from 'lucide-react';
+import { Home, BarChart3, Target, Receipt, Settings } from 'lucide-react';
 import { sound } from '../utils/sound';
 
-export default function Navbar({ activeTab, onChangeTab, goatState }) {
+export default function Navbar({ activeTab, onChangeTab }) {
   const tabs = [
-    { id: 'home', label: 'หน้าแรก', icon: Home },
-    { id: 'stats', label: 'สถิติ', icon: PieChart },
-    { id: 'goat', label: 'ปิ๊กมี่', customIcon: '🐐' },
-    { id: 'history', label: 'รายการ', icon: Receipt },
+    { id: 'home', label: 'ภาพรวม', icon: Home },
+    { id: 'analytics', label: 'วิเคราะห์', icon: BarChart3 },
+    { id: 'budgets', label: 'งบประมาณ', icon: Target },
+    { id: 'history', label: 'ประวัติ', icon: Receipt },
     { id: 'settings', label: 'ตั้งค่า', icon: Settings },
   ];
 
@@ -17,7 +17,7 @@ export default function Navbar({ activeTab, onChangeTab, goatState }) {
   };
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-neutral-200/70 pb-[calc(env(safe-area-inset-bottom)+8px)] pt-2 px-3 shadow-lg transition-all">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-[#080C14]/95 backdrop-blur-md border-t border-neutral-800 pb-[calc(env(safe-area-inset-bottom)+8px)] pt-2 px-3 shadow-2xl transition-all">
       <div className="max-w-md mx-auto flex items-center justify-around">
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
@@ -28,33 +28,26 @@ export default function Navbar({ activeTab, onChangeTab, goatState }) {
               key={tab.id}
               onClick={() => handleTabClick(tab.id)}
               className={`flex flex-col items-center justify-center flex-1 py-1 rounded-2xl transition-all relative select-none ${
-                isActive ? 'text-neutral-900 font-bold' : 'text-neutral-400 hover:text-neutral-600'
+                isActive ? 'text-cyan-400 font-bold' : 'text-neutral-500 hover:text-neutral-300'
               }`}
             >
-              {tab.customIcon ? (
-                <div className="relative">
-                  <span className={`text-xl transition-transform ${isActive ? 'scale-115' : 'grayscale-50'}`}>
-                    {tab.customIcon}
-                  </span>
-                  {goatState?.mood === 'hungry' && (
-                    <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-rose-500 animate-ping" />
-                  )}
-                </div>
-              ) : (
+              <div className="relative">
                 <Icon
-                  className={`w-5 h-5 transition-transform ${
-                    isActive ? 'scale-110 stroke-[2.4]' : 'stroke-[1.8]'
+                  className={`w-5 h-5 transition-transform duration-200 ${
+                    isActive ? 'scale-115 text-cyan-400 stroke-[2.4]' : 'stroke-[1.8]'
                   }`}
                 />
-              )}
+              </div>
 
-              <span className={`text-[10px] mt-1 tracking-tight ${isActive ? 'font-extrabold text-neutral-900' : 'font-medium'}`}>
+              <span className={`text-[10px] mt-1 tracking-tight ${
+                isActive ? 'font-black text-cyan-300' : 'font-medium'
+              }`}>
                 {tab.label}
               </span>
 
               {/* Active pill dot indicator */}
               {isActive && (
-                <span className="w-1 h-1 rounded-full bg-neutral-900 mt-0.5" />
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-sm shadow-cyan-400/80 mt-0.5" />
               )}
             </button>
           );

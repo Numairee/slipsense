@@ -1,7 +1,7 @@
 // Automatic Gallery Slip Scanner for Pygmy Android
 // Scans Android device storage / photo gallery automatically without user having to pick files manually
 
-import { registerPlugin } from '@capacitor/core';
+import { Capacitor, registerPlugin } from '@capacitor/core';
 import { parseSlipImage, SAMPLE_TEST_SLIPS } from './slipParser';
 import { matchCategory } from '../data/defaultCategories';
 
@@ -10,9 +10,14 @@ const GalleryScanner = registerPlugin('GalleryScanner');
 export const AutoScanner = {
   isNative() {
     if (typeof window === 'undefined') return false;
-    if (window.Capacitor?.isNativePlatform()) return true;
+    try {
+      if (Capacitor && typeof Capacitor.isNativePlatform === 'function' && Capacitor.isNativePlatform()) {
+        return true;
+      }
+    } catch (e) {}
+    if (window.Capacitor?.isNativePlatform?.()) return true;
     const ua = navigator.userAgent || '';
-    return /;\s*wv\)/i.test(ua);
+    return /;\s*wv\)/i.test(ua) || /Android.*Version\/[0-9.]+\s+(?:Chrome|Mobile)/i.test(ua);
   },
 
   /**
@@ -40,13 +45,10 @@ export const AutoScanner = {
    */
   async scanNativeGallery(existingTransactions = [], categories = [], merchantRules = {}) {
     try {
-      // Scan across all bank folders & recent screenshots with timeout protection
-      const timeoutPromise = new Promise(resolve => setTimeout(() => resolve({ success: true, slips: [], count: 0, timedOut: true }), 25000));
-      const scanPromise = GalleryScanner.scanRecentSlips({
+      // Scan across all bank folders & recent screenshots with full native ML Kit speed
+      const res = await GalleryScanner.scanRecentSlips({
         limit: 300
       });
-
-      const res = await Promise.race([scanPromise, timeoutPromise]);
 
       if (!res) {
         return { success: true, newSlips: [], duplicatesCount: 0, totalScanned: 0 };

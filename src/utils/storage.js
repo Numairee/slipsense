@@ -9,6 +9,17 @@ const STORAGE_KEYS = {
   MERCHANT_RULES: 'pygmy_merchant_rules_v1',
   GOAT_STATE: 'pygmy_goat_state_v1',
   SETTINGS: 'pygmy_settings_v1',
+  BUDGETS: 'slipsense_budgets_v1',
+};
+
+export const DEFAULT_BUDGETS = {
+  food: 8000,
+  transport: 2500,
+  shopping: 3500,
+  bills: 4500,
+  health: 1500,
+  entertainment: 2000,
+  other: 2000
 };
 
 // Initial demo transactions so the user immediately sees the beautiful UI on first run
@@ -219,6 +230,28 @@ export const Storage = {
     return updated;
   },
 
+  // --- Budgets ---
+  getBudgets() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.BUDGETS);
+      return raw ? JSON.parse(raw) : { ...DEFAULT_BUDGETS };
+    } catch {
+      return { ...DEFAULT_BUDGETS };
+    }
+  },
+
+  saveBudget(categoryId, amount) {
+    const budgets = this.getBudgets();
+    budgets[categoryId] = Number(amount);
+    localStorage.setItem(STORAGE_KEYS.BUDGETS, JSON.stringify(budgets));
+    return budgets;
+  },
+
+  saveAllBudgets(budgets) {
+    localStorage.setItem(STORAGE_KEYS.BUDGETS, JSON.stringify(budgets));
+    return budgets;
+  },
+
   // --- Export / Import Backup ---
   exportAllDataJSON() {
     return JSON.stringify({
@@ -255,6 +288,7 @@ export const Storage = {
     localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify([]));
     localStorage.setItem(STORAGE_KEYS.MERCHANT_RULES, JSON.stringify({}));
     localStorage.setItem(STORAGE_KEYS.GOAT_STATE, JSON.stringify(CLEAN_GOAT_STATE));
+    localStorage.setItem(STORAGE_KEYS.BUDGETS, JSON.stringify(DEFAULT_BUDGETS));
   },
 
   resetEntireApp() {
@@ -263,6 +297,7 @@ export const Storage = {
       transactions: [],
       categories: DEFAULT_CATEGORIES,
       merchantRules: {},
+      budgets: { ...DEFAULT_BUDGETS },
       goatState: { ...CLEAN_GOAT_STATE },
     };
   }

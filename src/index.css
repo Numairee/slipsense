@@ -9,7 +9,7 @@
   }
 
   body {
-    @apply bg-neutral-100 text-neutral-900 antialiased select-none;
+    @apply bg-[#080C14] text-white antialiased select-none;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "Sukhumvit Set", "Sarabun", sans-serif;
     -webkit-tap-highlight-color: transparent;
   }

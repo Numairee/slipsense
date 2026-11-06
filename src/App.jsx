@@ -4,9 +4,9 @@ import Navbar from './components/Navbar';
 import InstallPrompt from './components/InstallPrompt';
 import AutoScanToast from './components/AutoScanToast';
 import HomeView from './views/HomeView';
-import StatsView from './views/StatsView';
+import AnalyticsView from './views/AnalyticsView';
+import BudgetsView from './views/BudgetsView';
 import HistoryView from './views/HistoryView';
-import GoatView from './views/GoatView';
 import SettingsView from './views/SettingsView';
 import ScanModal from './components/ScanModal';
 import ManualAddModal from './components/ManualAddModal';
@@ -22,7 +22,7 @@ export default function App() {
   const [transactions, setTransactions] = useState(() => Storage.getTransactions());
   const [categories, setCategories] = useState(() => Storage.getCategories());
   const [merchantRules, setMerchantRules] = useState(() => Storage.getMerchantRules());
-  const [goatState, setGoatState] = useState(() => Storage.getGoatState());
+  const [budgets, setBudgets] = useState(() => Storage.getBudgets());
   const [currentDate, setCurrentDate] = useState(new Date());
   const [activeTab, setActiveTab] = useState('home');
 
@@ -34,7 +34,7 @@ export default function App() {
   const [isAutoScanning, setIsAutoScanning] = useState(false);
   const [scanToast, setScanToast] = useState(null);
   const [autoScanOnStartup, setAutoScanOnStartup] = useState(() => {
-    return localStorage.getItem('pygmy_auto_scan_on_launch') === 'true';
+    return localStorage.getItem('slipsense_auto_scan_on_launch') === 'true';
   });
 
   const syncMonthToLatestSlip = (slips = []) => {
@@ -76,22 +76,19 @@ export default function App() {
       syncMonthToLatestSlip(res.newSlips);
       const updated = Storage.addBatchTransactions(res.newSlips);
       setTransactions(updated);
-      const newGoat = Storage.feedGoat(res.newSlips.length);
-      setGoatState(newGoat);
 
       sound.playCrunch();
       setTimeout(() => {
-        sound.playGoatBaa();
         confetti({
-          particleCount: 45,
-          spread: 75,
+          particleCount: 50,
+          spread: 80,
           origin: { y: 0.25 }
         });
-      }, 300);
+      }, 250);
 
       setScanToast({
-        title: `พบสลิปใหม่ ${res.newSlips.length} ใบ! 🎉`,
-        message: `บันทึกยอดและให้อาหารน้องปิ๊กมี่เรียบร้อยแล้ว (ข้ามสลิปซ้ำ ${res.duplicatesCount || 0} ใบ)`
+        title: `พบสลิปใหม่ ${res.newSlips.length} ใบ! ⚡`,
+        message: `บันทึกยอดเงินเข้าภาพรวมเรียบร้อยแล้ว (ข้ามสลิปซ้ำ ${res.duplicatesCount || 0} ใบ)`
       });
 
       setTimeout(() => setScanToast(null), 5000);
@@ -104,10 +101,10 @@ export default function App() {
       });
       setTimeout(() => setScanToast(null), 6000);
     } else if (!isSilentOnStartup) {
-      const dupMsg = res?.duplicatesCount > 0 ? ` (พบสลิปที่บันทึกไปแล้ว ${res.duplicatesCount} ใบ)` : '';
+      const dupMsg = res?.duplicatesCount > 0 ? ` (พบสลิปที่เคยบันทึกแล้ว ${res.duplicatesCount} ใบ)` : '';
       setScanToast({
         title: `ตรวจอัลบั้มแล้ว (${res?.totalScanned || 0} รูป)${dupMsg}`,
-        message: 'ไม่พบสลิปใหม่เพิ่มเติม หากสลิปอยู่ในโฟลเดอร์อื่น กดเลือกรูปสลิปได้เลย',
+        message: 'ไม่พบสลิปใหม่เพิ่มเติม หากสลิปอยู่ในโฟลเดอร์อื่น สามารถกดเลือกรูปสลิปได้เลย',
         actionLabel: 'เลือกรูปสลิป',
         onAction: () => setIsScanOpen(true)
       });
@@ -118,7 +115,7 @@ export default function App() {
   const handleToggleAutoScanOnStartup = () => {
     setAutoScanOnStartup(prev => {
       const next = !prev;
-      localStorage.setItem('pygmy_auto_scan_on_launch', String(next));
+      localStorage.setItem('slipsense_auto_scan_on_launch', String(next));
       return next;
     });
   };
@@ -126,7 +123,7 @@ export default function App() {
   // Auto-Scan in background on app startup (only if enabled by user in settings)
   useEffect(() => {
     const timer = setTimeout(() => {
-      const isEnabled = localStorage.getItem('pygmy_auto_scan_on_launch') === 'true';
+      const isEnabled = localStorage.getItem('slipsense_auto_scan_on_launch') === 'true';
       if (AutoScanner.isNative() && isEnabled) {
         handleTriggerAutoScan(true);
       }
@@ -140,12 +137,10 @@ export default function App() {
     syncMonthToLatestSlip(newTxList);
     const updated = Storage.addBatchTransactions(newTxList);
     setTransactions(updated);
-    const newGoat = Storage.feedGoat(newTxList.length);
-    setGoatState(newGoat);
 
     setScanToast({
-      title: `บันทึกสลิปสำเร็จ ${newTxList.length} ใบ! 🎉`,
-      message: 'เพิ่มรายการเข้าสรุปยอดและให้อาหารน้องปิ๊กมี่เรียบร้อยแล้ว'
+      title: `บันทึกสลิปสำเร็จ ${newTxList.length} ใบ! ✨`,
+      message: 'เพิ่มรายการเข้าสรุปยอดเรียบร้อยแล้ว'
     });
     setTimeout(() => setScanToast(null), 4000);
   };
@@ -155,8 +150,6 @@ export default function App() {
     syncMonthToLatestSlip([tx]);
     const updated = Storage.addTransaction(tx);
     setTransactions(updated);
-    const newGoat = Storage.feedGoat(1);
-    setGoatState(newGoat);
   };
 
   // Update transaction
@@ -176,10 +169,10 @@ export default function App() {
     setTransactions(updated);
   };
 
-  // Feed goat manual snack
-  const handleFeedGoat = (amount = 1) => {
-    const updated = Storage.feedGoat(amount);
-    setGoatState(updated);
+  // Update category budget
+  const handleUpdateBudget = (categoryId, amount) => {
+    const updated = Storage.saveBudget(categoryId, amount);
+    setBudgets({ ...updated });
   };
 
   // Export CSV
@@ -194,7 +187,7 @@ export default function App() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `Pygmy_Backup_${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `SlipSense_Backup_${new Date().toISOString().split('T')[0]}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -208,7 +201,7 @@ export default function App() {
       setTransactions(Storage.getTransactions());
       setCategories(Storage.getCategories());
       setMerchantRules(Storage.getMerchantRules());
-      setGoatState(Storage.getGoatState());
+      setBudgets(Storage.getBudgets());
     }
     return success;
   };
@@ -219,7 +212,7 @@ export default function App() {
     setTransactions(clean.transactions);
     setCategories(clean.categories);
     setMerchantRules(clean.merchantRules);
-    setGoatState(clean.goatState);
+    setBudgets(clean.budgets);
     setCurrentDate(new Date());
     setActiveTab('home');
 
@@ -234,9 +227,6 @@ export default function App() {
   // Clear all and re-scan fresh from device gallery
   const handleClearAndRescan = async () => {
     sound.playPop();
-    const confirmed = window.confirm('ต้องการลบรายการทั้งหมดที่มีอยู่ แล้วสแกนค้นหาสลิปจริงใหม่ทั้งหมดใช่หรือไม่? (รูปถ่ายทั่วไปและภาพหน้าจออื่นๆ จะไม่ถูกนำเข้า)');
-    if (!confirmed) return;
-
     Storage.saveTransactions([]);
     setTransactions([]);
 
@@ -253,12 +243,9 @@ export default function App() {
       syncMonthToLatestSlip(res.newSlips);
       const updated = Storage.addBatchTransactions(res.newSlips);
       setTransactions(updated);
-      const newGoat = Storage.feedGoat(res.newSlips.length);
-      setGoatState(newGoat);
 
       sound.playCrunch();
       setTimeout(() => {
-        sound.playGoatBaa();
         confetti({
           particleCount: 50,
           spread: 80,
@@ -267,7 +254,7 @@ export default function App() {
       }, 300);
 
       setScanToast({
-        title: `สแกนใหม่สำเร็จ พบสลิปจริง ${res.newSlips.length} ใบ! ✨`,
+        title: `สแกนใหม่สำเร็จ พบสลิปจริง ${res.newSlips.length} ใบ! ⚡`,
         message: `คัดกรองเฉพาะสลิปโอนเงินจริงเรียบร้อยแล้ว`
       });
       setTimeout(() => setScanToast(null), 5000);
@@ -289,7 +276,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#FAF8F5] flex flex-col font-sans select-none antialiased text-neutral-900">
+    <div className="min-h-screen bg-[#080C14] flex flex-col font-sans select-none antialiased text-white">
       {/* Auto-Scan Floating Toast Notification */}
       <AutoScanToast
         notification={scanToast}
@@ -318,8 +305,8 @@ export default function App() {
           <HomeView
             transactions={transactions}
             categories={categories}
-            goatState={goatState}
             currentDate={currentDate}
+            budgets={budgets}
             isAutoScanning={isAutoScanning}
             onTriggerAutoScan={() => handleTriggerAutoScan(false)}
             onClearAndRescan={handleClearAndRescan}
@@ -327,18 +314,28 @@ export default function App() {
             onOpenScanModal={() => setIsScanOpen(true)}
             onOpenManualModal={() => setIsManualOpen(true)}
             onOpenDetailModal={(tx) => setActiveDetailTx(tx)}
-            onFeedGoat={handleFeedGoat}
-            onOpenGoatRoom={() => setActiveTab('goat')}
             onResetMonth={() => setCurrentDate(new Date())}
             onAddTransaction={handleAddManual}
+            onNavigateToAnalytics={() => setActiveTab('analytics')}
           />
         )}
 
-        {activeTab === 'stats' && (
-          <StatsView
+        {activeTab === 'analytics' && (
+          <AnalyticsView
             transactions={transactions}
             categories={categories}
             currentDate={currentDate}
+            budgets={budgets}
+          />
+        )}
+
+        {activeTab === 'budgets' && (
+          <BudgetsView
+            transactions={transactions}
+            categories={categories}
+            currentDate={currentDate}
+            budgets={budgets}
+            onUpdateBudget={handleUpdateBudget}
           />
         )}
 
@@ -348,14 +345,6 @@ export default function App() {
             categories={categories}
             onOpenDetailModal={(tx) => setActiveDetailTx(tx)}
             onExportCSV={handleExportCSV}
-          />
-        )}
-
-        {activeTab === 'goat' && (
-          <GoatView
-            goatState={goatState}
-            onFeedGoat={handleFeedGoat}
-            onOpenScanModal={() => setIsScanOpen(true)}
           />
         )}
 
@@ -413,7 +402,6 @@ export default function App() {
       <Navbar
         activeTab={activeTab}
         onChangeTab={setActiveTab}
-        goatState={goatState}
       />
     </div>
   );

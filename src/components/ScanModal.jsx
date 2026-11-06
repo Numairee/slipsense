@@ -84,7 +84,6 @@ export default function ScanModal({
     }
   };
 
-  // Add realistic sample test slips for immediate test verification
   const handleAddSample = (sample) => {
     sound.playPop();
     const d = new Date();
@@ -119,41 +118,23 @@ export default function ScanModal({
     });
   };
 
-  const handleUpdateItemAmount = (idx, newAmt) => {
-    const val = parseFloat(newAmt);
-    setExtractedItems(prev => {
-      const copy = [...prev];
-      copy[idx] = { ...copy[idx], amount: isNaN(val) ? 0 : val };
-      return copy;
-    });
-  };
-
-  const handleUpdateItemPayee = (idx, newPayee) => {
-    setExtractedItems(prev => {
-      const copy = [...prev];
-      copy[idx] = { ...copy[idx], payee: newPayee };
-      return copy;
-    });
-  };
-
   const handleRemoveItem = (idx) => {
     sound.playPop();
     setExtractedItems(prev => prev.filter((_, i) => i !== idx));
   };
 
-  // Items to import (filtered by skipDuplicates if enabled)
-  const itemsToImport = skipDuplicates
-    ? extractedItems.filter(item => !item.isDuplicate)
-    : extractedItems;
+  const itemsToImport = extractedItems.filter(item => {
+    if (skipDuplicates && item.isDuplicate) return false;
+    return true;
+  });
 
-  const duplicatesCount = extractedItems.filter(item => item.isDuplicate).length;
+  const duplicateItemsCount = extractedItems.filter(item => item.isDuplicate).length;
 
   const handleConfirmImport = () => {
     if (itemsToImport.length === 0) return;
 
     sound.playCrunch();
     setTimeout(() => {
-      sound.playGoatBaa();
       confetti({
         particleCount: 50,
         spread: 80,
@@ -173,22 +154,22 @@ export default function ScanModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-md animate-fade-in">
       <div
-        className="w-full max-w-lg bg-white rounded-t-3xl sm:rounded-3xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-slide-up"
+        className="w-full max-w-lg bg-neutral-900 border border-neutral-800 rounded-t-3xl sm:rounded-3xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-slide-up text-white"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="p-4 border-b border-neutral-200/80 flex items-center justify-between bg-neutral-50/80">
+        <div className="p-4 border-b border-neutral-800 flex items-center justify-between bg-neutral-900">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center text-lg">
+            <div className="w-8 h-8 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-lg">
               📸
             </div>
             <div>
-              <h3 className="font-bold text-base text-neutral-900 leading-tight">
-                สแกนสลิปโอนเงิน (e-Slip)
+              <h3 className="font-bold text-base text-white leading-tight">
+                เลือกและสแกนสลิปโอนเงิน (e-Slip)
               </h3>
-              <p className="text-[11px] text-neutral-500 font-medium">
+              <p className="text-[11px] text-neutral-400 font-medium">
                 อ่านข้อมูลในเครื่อง 100% • ตรวจจับสลิปซ้ำให้อัตโนมัติ
               </p>
             </div>
@@ -196,7 +177,7 @@ export default function ScanModal({
 
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-neutral-200/80 hover:bg-neutral-300 flex items-center justify-center text-neutral-600 transition-colors"
+            className="w-8 h-8 rounded-full bg-neutral-800 hover:bg-neutral-700 flex items-center justify-center text-neutral-400 hover:text-white transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
@@ -211,8 +192,8 @@ export default function ScanModal({
             onDrop={handleDrop}
             className={`border-2 border-dashed rounded-3xl p-6 text-center transition-all ${
               dragOver
-                ? 'border-amber-500 bg-amber-50/50 scale-101'
-                : 'border-neutral-300 hover:border-neutral-400 bg-neutral-50/50'
+                ? 'border-cyan-500 bg-cyan-950/30 scale-101'
+                : 'border-neutral-700 hover:border-neutral-600 bg-neutral-800/40'
             }`}
           >
             <input
@@ -233,41 +214,45 @@ export default function ScanModal({
             />
 
             {isProcessing ? (
-              <div className="py-6 flex flex-col items-center justify-center text-neutral-600">
-                <Loader2 className="w-10 h-10 animate-spin text-amber-500 mb-2" />
-                <span className="font-bold text-sm text-neutral-800">
+              <div className="py-6 flex flex-col items-center justify-center text-neutral-400">
+                <Loader2 className="w-10 h-10 animate-spin text-cyan-400 mb-2" />
+                <span className="font-bold text-sm text-white">
                   กำลังอ่านข้อมูลสลิปในเครื่อง...
                 </span>
-                <span className="text-xs text-neutral-500">
+                <span className="text-xs text-neutral-400">
                   ตรวจจับธนาคาร, วันที่, จำนวนเงิน และตรวจเช็กสลิปซ้ำ
                 </span>
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center">
-                <div className="w-14 h-14 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mb-3">
+                <div className="w-14 h-14 rounded-2xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center mb-3">
                   <UploadCloud className="w-7 h-7" />
                 </div>
-                <h4 className="font-bold text-sm text-neutral-900 mb-1">
-                  เลือกรูปสลิปจากอัลบั้ม หรือ ถ่ายรูปสลิป
+                <h4 className="font-bold text-sm text-white mb-1">
+                  ลากไฟล์รูปสลิปมาวาง หรือกดเลือกรูปภาพ
                 </h4>
-                <p className="text-xs text-neutral-500 max-w-xs mb-4">
-                  เลือกทีละหลายๆ รูปพร้อมกันได้เลย ระบบจะแยกสลิปที่เคยอ่านแล้วให้อัตโนมัติ ไม่ต้องกลัวยอดซ้ำ
+                <p className="text-xs text-neutral-400 mb-4 max-w-xs">
+                  รองรับสลิปทุกธนาคารไทย (K PLUS, SCB, NEXT, KMA, ttb, ฯลฯ)
                 </p>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap gap-2 justify-center">
                   <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-neutral-900 text-white text-xs font-bold shadow-xs hover:bg-neutral-800 active:scale-95 transition-all"
+                    onClick={() => {
+                      sound.playPop();
+                      fileInputRef.current?.click();
+                    }}
+                    className="px-4 py-2.5 rounded-xl bg-cyan-500 text-white font-bold text-xs hover:bg-cyan-600 active:scale-95 shadow-md shadow-cyan-500/20 flex items-center gap-1.5 transition-all"
                   >
                     <Image className="w-4 h-4" />
-                    เลือกรูปสลิปในเครื่อง
+                    เลือกรูปสลิปจากอัลบั้ม
                   </button>
 
                   <button
-                    type="button"
-                    onClick={() => cameraInputRef.current?.click()}
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl border border-neutral-300 bg-white text-neutral-800 text-xs font-bold hover:bg-neutral-100 active:scale-95 transition-all"
+                    onClick={() => {
+                      sound.playPop();
+                      cameraInputRef.current?.click();
+                    }}
+                    className="px-4 py-2.5 rounded-xl bg-neutral-800 text-neutral-300 font-bold text-xs hover:bg-neutral-700 active:scale-95 border border-neutral-700 flex items-center gap-1.5 transition-all"
                   >
                     <Camera className="w-4 h-4" />
                     ถ่ายภาพสลิป
@@ -277,179 +262,107 @@ export default function ScanModal({
             )}
           </div>
 
-          {/* 1-Click Sample Slips Section */}
-          <div className="bg-neutral-100/70 rounded-2xl p-3 border border-neutral-200/70">
+          {/* Quick Demo Test Slips */}
+          <div className="p-3 bg-neutral-800/60 rounded-2xl border border-neutral-700/60">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-bold text-neutral-700 flex items-center gap-1">
-                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                ทดสอบด้วยสลิปตัวอย่าง (1-Click Test)
+              <span className="text-xs font-bold text-neutral-300 flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                ทดสอบด้วยตัวอย่างสลิปสำเร็จรูป:
               </span>
-              <span className="text-[10px] text-neutral-400">กดเพื่อลองสแกน</span>
             </div>
-            <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
-              {SAMPLE_TEST_SLIPS.map((sample, idx) => {
-                const b = getBankById(sample.bankId);
-                return (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => handleAddSample(sample)}
-                    className="shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-white border border-neutral-200/80 text-xs font-medium hover:border-neutral-400 active:scale-95 transition-all shadow-2xs"
-                  >
-                    <span
-                      className="w-2.5 h-2.5 rounded-full"
-                      style={{ backgroundColor: b.color }}
-                    />
-                    <span>{b.shortName} (฿{sample.amount})</span>
-                  </button>
-                );
-              })}
+            <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+              {SAMPLE_TEST_SLIPS.map((sample, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => handleAddSample(sample)}
+                  className="shrink-0 px-2.5 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-[11px] font-medium text-neutral-200 active:scale-95 transition-all flex items-center gap-1"
+                >
+                  <Plus className="w-3 h-3 text-cyan-400" />
+                  <span>{sample.name.replace('สลิป ', '')}</span>
+                </button>
+              ))}
             </div>
           </div>
 
-          {/* Non-slip rejected notification */}
-          {rejectedCount > 0 && (
-            <div className="p-2.5 rounded-xl bg-neutral-100 border border-neutral-200 flex items-center justify-between text-xs text-neutral-600">
-              <span className="flex items-center gap-1.5 font-medium">
-                <AlertCircle className="w-4 h-4 text-neutral-500 shrink-0" />
-                คัดกรองรูปที่ไม่ใช่สลิปออกอัตโนมัติ ({rejectedCount} รูป)
-              </span>
-              <button
-                type="button"
-                onClick={() => setRejectedCount(0)}
-                className="text-[10px] text-neutral-400 hover:text-neutral-700"
-              >
-                ปิด
-              </button>
-            </div>
-          )}
-
-          {/* Extracted Items Preview List */}
+          {/* Extracted Items Section */}
           {extractedItems.length > 0 && (
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-1.5">
-                  <h4 className="text-xs font-bold text-neutral-800 uppercase tracking-wide">
-                    สลิปที่ตรวจพบ ({extractedItems.length} ใบ)
-                  </h4>
-                  {duplicatesCount > 0 && (
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
-                      พบสลิปซ้ำ {duplicatesCount} ใบ
-                    </span>
-                  )}
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setExtractedItems([])}
-                  className="text-[11px] text-rose-500 hover:text-rose-700 font-medium"
-                >
-                  ล้างทั้งหมด
-                </button>
+            <div className="space-y-3 pt-2">
+              <div className="flex items-center justify-between text-xs px-1">
+                <span className="font-extrabold text-white">
+                  สลิปที่ตรวจพบ ({extractedItems.length} ใบ)
+                </span>
+                {duplicateItemsCount > 0 && (
+                  <label className="flex items-center gap-1.5 cursor-pointer text-neutral-300">
+                    <input
+                      type="checkbox"
+                      checked={skipDuplicates}
+                      onChange={(e) => setSkipDuplicates(e.target.checked)}
+                      className="rounded accent-cyan-500 w-3.5 h-3.5"
+                    />
+                    <span>ข้ามสลิปซ้ำ ({duplicateItemsCount})</span>
+                  </label>
+                )}
               </div>
 
-              {/* Skip duplicates toggle */}
-              {duplicatesCount > 0 && (
-                <div className="mb-2 p-2.5 rounded-xl bg-amber-50 border border-amber-200/70 flex items-center justify-between text-xs text-amber-900">
-                  <span className="flex items-center gap-1.5 font-medium">
-                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                    ข้ามสลิปที่เคยอ่านแล้วอัตโนมัติ
-                  </span>
-                  <input
-                    type="checkbox"
-                    checked={skipDuplicates}
-                    onChange={(e) => setSkipDuplicates(e.target.checked)}
-                    className="w-4 h-4 rounded text-amber-500 focus:ring-amber-400"
-                  />
-                </div>
-              )}
-
-              <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1">
+              <div className="space-y-2">
                 {extractedItems.map((item, idx) => {
-                  const b = getBankById(item.bankId);
-                  const c = getCategoryById(categories, item.categoryId);
+                  const bank = getBankById(item.bankId);
+                  const isExcluded = skipDuplicates && item.isDuplicate;
 
                   return (
                     <div
                       key={item.id || idx}
-                      className={`p-3 rounded-2xl border flex items-center justify-between gap-3 animate-fade-in ${
-                        item.isDuplicate
-                          ? 'bg-amber-50/60 border-amber-200/80 opacity-75'
-                          : 'bg-neutral-50 border-neutral-200'
+                      className={`p-3 rounded-2xl border transition-all flex items-center justify-between gap-2.5 ${
+                        isExcluded
+                          ? 'bg-neutral-800/40 border-neutral-800 opacity-60'
+                          : 'bg-neutral-800/80 border-neutral-700/80 shadow-md'
                       }`}
                     >
                       <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                        {item.slipThumbnail ? (
-                          <img
-                            src={item.slipThumbnail}
-                            alt="Slip"
-                            className="w-10 h-12 object-cover rounded-xl border border-neutral-300 shadow-2xs shrink-0"
-                          />
-                        ) : (
-                          <div
-                            className="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-[11px] shrink-0 text-white shadow-2xs"
-                            style={{ backgroundColor: b.color }}
-                          >
-                            {b.iconText}
-                          </div>
-                        )}
+                        <div
+                          className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs shrink-0"
+                          style={{ backgroundColor: bank.color, color: bank.textColor }}
+                        >
+                          {bank.iconText}
+                        </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5">
-                            <input
-                              type="text"
-                              value={item.payee}
-                              onChange={(e) => handleUpdateItemPayee(idx, e.target.value)}
-                              className="font-bold text-xs text-neutral-900 bg-transparent border-b border-transparent hover:border-neutral-300 focus:border-amber-500 focus:outline-hidden px-0.5 w-full truncate"
-                              title="แตะเพื่อแก้ไขชื่อร้านค้า / ผู้รับเงิน"
-                            />
-                            {item.isDuplicate ? (
-                              <span className="shrink-0 text-[9px] font-bold px-1.5 py-0.2 rounded-md bg-amber-200 text-amber-900 flex items-center gap-0.5">
-                                ⚠️ อ่านแล้ว
-                              </span>
-                            ) : (
-                              <span className="shrink-0 text-[9px] font-bold px-1.5 py-0.2 rounded-md bg-emerald-100 text-emerald-700 flex items-center gap-0.5">
-                                ✨ สลิปใหม่
+                            <span className="font-bold text-xs text-white truncate">
+                              {item.payee}
+                            </span>
+                            {item.isDuplicate && (
+                              <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-amber-500/20 text-amber-300 font-bold shrink-0">
+                                เคยบันทึกแล้ว
                               </span>
                             )}
                           </div>
-
-                          <div className="flex items-center gap-1.5 text-[11px] text-neutral-500 mt-0.5">
-                            <span>{item.date} {item.time}</span>
-                            <span>•</span>
-                            {/* Category Selector Pill */}
-                            <select
-                              value={item.categoryId}
-                              onChange={(e) => handleUpdateItemCategory(idx, e.target.value)}
-                              className="text-[11px] font-semibold bg-white border border-neutral-200 rounded-lg px-1.5 py-0.5 text-neutral-700 focus:outline-hidden"
-                            >
-                              {categories.map((cat) => (
-                                <option key={cat.id} value={cat.id}>
-                                  {cat.icon} {cat.shortName || cat.name}
-                                </option>
-                              ))}
-                            </select>
+                          <div className="text-[11px] text-neutral-400 font-mono">
+                            {item.date} • {item.time}
                           </div>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2 shrink-0">
-                        <div className="text-right">
-                          <div className="flex items-center font-mono font-bold text-xs text-neutral-900">
-                            <span className="text-neutral-400 mr-0.5">-฿</span>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={item.amount}
-                              onChange={(e) => handleUpdateItemAmount(idx, e.target.value)}
-                              className="w-20 font-mono font-bold text-xs text-right bg-white border border-neutral-200 hover:border-neutral-400 focus:border-amber-500 rounded-lg px-1.5 py-1 focus:outline-hidden shadow-2xs"
-                              title="แตะเพื่อแก้ไขจำนวนเงิน"
-                            />
+                      <div className="text-right shrink-0 flex items-center gap-2">
+                        <div>
+                          <div className="font-bold font-mono text-xs text-white">
+                            ฿{formatBaht(item.amount)}
                           </div>
+                          <select
+                            value={item.categoryId}
+                            onChange={(e) => handleUpdateItemCategory(idx, e.target.value)}
+                            className="text-[10px] bg-neutral-700 text-neutral-200 border border-neutral-600 rounded-lg px-1.5 py-0.5 mt-0.5"
+                          >
+                            {categories.map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.icon} {c.name}
+                              </option>
+                            ))}
+                          </select>
                         </div>
+
                         <button
-                          type="button"
                           onClick={() => handleRemoveItem(idx)}
-                          className="w-6 h-6 rounded-full hover:bg-neutral-200 flex items-center justify-center text-neutral-400 hover:text-neutral-700 transition-colors"
+                          className="w-6 h-6 rounded-full hover:bg-neutral-700 flex items-center justify-center text-neutral-400 hover:text-white"
                         >
                           <X className="w-3.5 h-3.5" />
                         </button>
@@ -463,32 +376,21 @@ export default function ScanModal({
         </div>
 
         {/* Modal Footer */}
-        <div className="p-4 border-t border-neutral-200/80 bg-neutral-50 flex items-center justify-between gap-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2.5 rounded-xl border border-neutral-300 text-xs font-semibold text-neutral-700 hover:bg-neutral-100"
-          >
-            ยกเลิก
-          </button>
-
-          <button
-            type="button"
-            disabled={itemsToImport.length === 0}
-            onClick={handleConfirmImport}
-            className={`flex-1 py-3 px-4 rounded-2xl font-bold text-xs shadow-md transition-all flex items-center justify-center gap-1.5 ${
-              itemsToImport.length > 0
-                ? 'bg-amber-500 hover:bg-amber-600 text-white active:scale-98'
-                : 'bg-neutral-200 text-neutral-400 cursor-not-allowed'
-            }`}
-          >
-            <Check className="w-4 h-4" />
-            <span>
-              บันทึก ({itemsToImport.length} สลิป)
-              {duplicatesCount > 0 && skipDuplicates && ` • ข้ามซ้ำ ${duplicatesCount} ใบ`}
-            </span>
-          </button>
-        </div>
+        {extractedItems.length > 0 && (
+          <div className="p-4 border-t border-neutral-800 bg-neutral-900 flex items-center justify-between gap-3">
+            <div className="text-xs text-neutral-400">
+              พร้อมนำเข้า <b className="text-white">{itemsToImport.length}</b> รายการ
+            </div>
+            <button
+              onClick={handleConfirmImport}
+              disabled={itemsToImport.length === 0}
+              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 disabled:opacity-50 text-white font-extrabold text-xs shadow-lg shadow-cyan-500/20 active:scale-95 transition-all flex items-center gap-1.5"
+            >
+              <span>บันทึกเข้าสรุปยอด</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

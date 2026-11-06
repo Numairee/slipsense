@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import {
   ShieldCheck, Download, Upload, Trash2, Tag, BookOpen,
-  Info, ExternalLink, RefreshCw, CheckCircle2, AlertTriangle, Sparkles
+  Info, ExternalLink, RefreshCw, CheckCircle2, AlertTriangle, Sparkles, Zap
 } from 'lucide-react';
 import { sound } from '../utils/sound';
 
@@ -47,57 +47,57 @@ export default function SettingsView({
   const merchantRulesList = Object.entries(merchantRules || {});
 
   return (
-    <div className="space-y-4 pb-20 animate-fade-in">
+    <div className="space-y-4 pb-24 animate-fade-in">
       {/* Privacy First (No-Track) Showcase Card */}
-      <div className="rounded-3xl bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-800 text-white p-5 shadow-md">
+      <div className="rounded-3xl bg-gradient-to-br from-neutral-900 via-neutral-900 to-neutral-800 border border-neutral-700/60 text-white p-5 shadow-xl">
         <div className="flex items-center gap-2 mb-2">
-          <div className="w-8 h-8 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center">
-            <ShieldCheck className="w-5 h-5 text-white" />
+          <div className="w-8 h-8 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center">
+            <ShieldCheck className="w-5 h-5 text-cyan-400" />
           </div>
           <div>
-            <h3 className="font-extrabold text-sm tracking-tight">
-              No-Track Tracker Guarantee
+            <h3 className="font-extrabold text-sm tracking-tight text-white">
+              SlipSense 100% On-Device Privacy
             </h3>
-            <span className="text-[11px] text-emerald-100 font-medium">
-              บันทึกและประมวลผลบนเครื่องเท่านั้น
+            <span className="text-[11px] text-cyan-300 font-medium">
+              สแกนและประมวลผลบนเครื่องเท่านั้น ปลอดภัยระดับสูงสุด
             </span>
           </div>
         </div>
 
-        <p className="text-xs text-emerald-50 leading-relaxed mb-3">
-          ตามแนวคิดของ Pygmy ข้อมูลสลิปและรายการทั้งหมดประมวลผลบนเครื่องของคุณเท่านั้น ไม่มีการส่งรูปหรือตัวเลขออกภายนอก ไม่มีเซิร์ฟเวอร์กลาง และไม่มีระบบติดตามการใช้งาน
+        <p className="text-xs text-neutral-300 leading-relaxed mb-3">
+          ข้อมูลสลิปและรายการธุรกรรมทั้งหมดถูกอ่านและจัดเก็บในหน่วยความจำของเครื่องคุณเท่านั้น ไม่มีการส่งรูปภาพหรือตัวเลขออกภายนอก ไม่มีเซิร์ฟเวอร์ และไม่มีระบบติดตามตัวตน
         </p>
 
-        <div className="grid grid-cols-3 gap-2 pt-2 border-t border-white/20 text-center text-[10px]">
-          <div className="bg-white/10 rounded-xl p-1.5 backdrop-blur-xs">
-            <span className="font-bold block text-white">🔒 On-Device</span>
-            <span className="text-emerald-200">ทำงานแบบออฟไลน์</span>
+        <div className="grid grid-cols-3 gap-2 pt-2 border-t border-white/10 text-center text-[10px]">
+          <div className="bg-white/5 rounded-xl p-2 border border-white/5">
+            <span className="font-bold block text-white">🔒 100% Offline</span>
+            <span className="text-neutral-400">ทำงานโดยไม่ต้องต่อเน็ต</span>
           </div>
-          <div className="bg-white/10 rounded-xl p-1.5 backdrop-blur-xs">
-            <span className="font-bold block text-white">🚫 No Server</span>
-            <span className="text-emerald-200">ไม่มีเซิร์ฟเวอร์กลาง</span>
+          <div className="bg-white/5 rounded-xl p-2 border border-white/5">
+            <span className="font-bold block text-white">🚫 No Cloud</span>
+            <span className="text-neutral-400">ไม่มีฐานข้อมูลภายนอก</span>
           </div>
-          <div className="bg-white/10 rounded-xl p-1.5 backdrop-blur-xs">
-            <span className="font-bold block text-white">✨ Zero Ads</span>
-            <span className="text-emerald-200">ไม่มีโฆษณากวนใจ</span>
+          <div className="bg-white/5 rounded-xl p-2 border border-white/5">
+            <span className="font-bold block text-white">🛡️ Safe Gallery</span>
+            <span className="text-neutral-400">ไม่ลบรูปจริงในมือถือ</span>
           </div>
         </div>
       </div>
 
       {/* Data Export & Backup Section */}
-      <div className="bg-white rounded-3xl p-4 border border-neutral-200/80 shadow-xs space-y-3">
-        <h4 className="font-extrabold text-xs text-neutral-900 uppercase tracking-wide">
+      <div className="bg-neutral-900 rounded-3xl p-4 border border-neutral-800 shadow-md space-y-3">
+        <h4 className="font-extrabold text-xs text-neutral-400 uppercase tracking-wide">
           การจัดการข้อมูล & สำรองไฟล์
         </h4>
 
         {/* Export CSV */}
-        <div className="flex items-center justify-between p-3 rounded-2xl bg-neutral-50 border border-neutral-200/70">
+        <div className="flex items-center justify-between p-3 rounded-2xl bg-neutral-800/80 border border-neutral-700/60">
           <div>
-            <h5 className="font-bold text-xs text-neutral-900">
+            <h5 className="font-bold text-xs text-white">
               ส่งออกไฟล์ CSV (สำหรับ Excel / AI)
             </h5>
-            <p className="text-[11px] text-neutral-500">
-              เข้ารหัส UTF-8 with BOM เปิดใน Excel หรือ Sheets ได้โดยสระไม่เพี้ยน
+            <p className="text-[11px] text-neutral-400">
+              UTF-8 with BOM เปิดใน Excel หรือ Sheets ได้ทันทีโดยสระไม่เพี้ยน
             </p>
           </div>
           <button
@@ -105,7 +105,7 @@ export default function SettingsView({
               sound.playPop();
               onExportCSV();
             }}
-            className="shrink-0 px-3.5 py-2 rounded-xl bg-neutral-900 text-white font-bold text-xs hover:bg-neutral-800 active:scale-95 shadow-xs transition-all flex items-center gap-1.5"
+            className="shrink-0 px-3.5 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-600 active:scale-95 text-white font-bold text-xs shadow-md shadow-cyan-500/20 transition-all flex items-center gap-1.5"
           >
             <Download className="w-3.5 h-3.5" />
             ส่งออก CSV
@@ -119,9 +119,9 @@ export default function SettingsView({
               sound.playPop();
               onExportBackup();
             }}
-            className="p-3 rounded-2xl border border-neutral-200 hover:bg-neutral-50 active:scale-98 transition-all flex flex-col items-center justify-center text-center text-neutral-800"
+            className="p-3 rounded-2xl bg-neutral-800/60 border border-neutral-700/60 hover:bg-neutral-800 active:scale-98 transition-all flex flex-col items-center justify-center text-center text-neutral-200"
           >
-            <Download className="w-5 h-5 text-amber-500 mb-1" />
+            <Download className="w-5 h-5 text-amber-400 mb-1" />
             <span className="font-bold text-xs">สำรองข้อมูล (JSON)</span>
             <span className="text-[10px] text-neutral-400">บันทึกทุกรายการ</span>
           </button>
@@ -139,9 +139,9 @@ export default function SettingsView({
               sound.playPop();
               fileInputRef.current?.click();
             }}
-            className="p-3 rounded-2xl border border-neutral-200 hover:bg-neutral-50 active:scale-98 transition-all flex flex-col items-center justify-center text-center text-neutral-800"
+            className="p-3 rounded-2xl bg-neutral-800/60 border border-neutral-700/60 hover:bg-neutral-800 active:scale-98 transition-all flex flex-col items-center justify-center text-center text-neutral-200"
           >
-            <Upload className="w-5 h-5 text-blue-500 mb-1" />
+            <Upload className="w-5 h-5 text-cyan-400 mb-1" />
             <span className="font-bold text-xs">กู้คืนข้อมูล (Restore)</span>
             <span className="text-[10px] text-neutral-400">เลือกไฟล์ JSON</span>
           </button>
@@ -149,7 +149,7 @@ export default function SettingsView({
 
         {importStatus && (
           <div className={`p-2.5 rounded-xl text-xs font-medium flex items-center gap-2 ${
-            importStatus.success ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+            importStatus.success ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
           }`}>
             {importStatus.success ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertTriangle className="w-4 h-4 shrink-0" />}
             <span>{importStatus.message}</span>
@@ -157,60 +157,18 @@ export default function SettingsView({
         )}
       </div>
 
-      {/* Learned Merchant Rules Section */}
-      <div className="bg-white rounded-3xl p-4 border border-neutral-200/80 shadow-xs space-y-2">
-        <div className="flex items-center justify-between">
-          <div>
-            <h4 className="font-extrabold text-xs text-neutral-900 uppercase tracking-wide">
-              กฎจดจำร้านค้าอัตโนมัติ ({merchantRulesList.length})
-            </h4>
-            <p className="text-[10px] text-neutral-400">
-              เมื่อเปลี่ยนหมวดหมู่ร้านค้า ระบบจะจดจำไว้ใช้ในครั้งต่อไป
-            </p>
-          </div>
-          {merchantRulesList.length > 0 && (
-            <button
-              onClick={() => {
-                sound.playPop();
-                onClearMerchantRules();
-              }}
-              className="text-[11px] font-medium text-rose-500 hover:text-rose-700"
-            >
-              ล้างกฎ
-            </button>
-          )}
-        </div>
-
-        <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto pt-1">
-          {merchantRulesList.length === 0 ? (
-            <span className="text-xs text-neutral-400 py-2">
-              ยังไม่มีการบันทึกกฎร้านค้า (จะสร้างให้อัตโนมัติเมื่อเลือกหมวดหมู่)
-            </span>
-          ) : (
-            merchantRulesList.map(([merchant, catId]) => (
-              <span
-                key={merchant}
-                className="px-2 py-1 bg-neutral-100 rounded-lg text-[11px] font-medium text-neutral-700 border border-neutral-200"
-              >
-                {merchant} → <b className="text-amber-600">{catId}</b>
-              </span>
-            ))
-          )}
-        </div>
-      </div>
-
       {/* Preferences Section */}
-      <div className="bg-white rounded-3xl p-4 border border-neutral-200/80 shadow-xs space-y-3">
-        <h4 className="font-extrabold text-xs text-neutral-900 uppercase tracking-wide">
+      <div className="bg-neutral-900 rounded-3xl p-4 border border-neutral-800 shadow-md space-y-3">
+        <h4 className="font-extrabold text-xs text-neutral-400 uppercase tracking-wide">
           การทำงานของระบบ
         </h4>
 
-        <div className="flex items-center justify-between p-3 rounded-2xl bg-neutral-50 border border-neutral-200/70">
+        <div className="flex items-center justify-between p-3 rounded-2xl bg-neutral-800/80 border border-neutral-700/60">
           <div>
-            <h5 className="font-bold text-xs text-neutral-900">
+            <h5 className="font-bold text-xs text-white">
               สแกนสลิปอัตโนมัติเมื่อเปิดแอป
             </h5>
-            <p className="text-[11px] text-neutral-500">
+            <p className="text-[11px] text-neutral-400">
               {autoScanOnStartup
                 ? 'เปิดใช้งาน: ค้นหาสลิปใหม่ทันทีที่เข้าแอป'
                 : 'ปิดใช้งาน: สแกนเฉพาะเมื่อกดปุ่มบนหน้าแรกเท่านั้น (แนะนำ)'}
@@ -223,7 +181,7 @@ export default function SettingsView({
               if (onToggleAutoScanOnStartup) onToggleAutoScanOnStartup();
             }}
             className={`w-12 h-6.5 rounded-full transition-colors p-1 flex items-center shrink-0 ${
-              autoScanOnStartup ? 'bg-amber-500 justify-end' : 'bg-neutral-300 justify-start'
+              autoScanOnStartup ? 'bg-cyan-500 justify-end' : 'bg-neutral-700 justify-start'
             }`}
           >
             <div className="w-4.5 h-4.5 rounded-full bg-white shadow-xs" />
@@ -232,16 +190,16 @@ export default function SettingsView({
       </div>
 
       {/* Danger Zone: Clear App / Reset Data */}
-      <div className="bg-rose-50/70 rounded-3xl p-4 border border-rose-200/90 shadow-xs space-y-2.5">
+      <div className="bg-rose-950/30 rounded-3xl p-4 border border-rose-800/60 shadow-md space-y-2.5">
         <div className="flex items-center justify-between">
-          <h4 className="font-extrabold text-xs text-rose-700 uppercase tracking-wide flex items-center gap-1.5">
-            <Trash2 className="w-4 h-4 text-rose-600" />
+          <h4 className="font-extrabold text-xs text-rose-400 uppercase tracking-wide flex items-center gap-1.5">
+            <Trash2 className="w-4 h-4 text-rose-400" />
             <span>ล้างข้อมูลแอป (Reset App)</span>
           </h4>
         </div>
 
-        <p className="text-xs text-rose-900/80 leading-relaxed">
-          ลบเฉพาะรายการสลิปและข้อมูลที่บันทึกไว้ในแอป (รูปภาพสลิปจริงในอัลบั้มมือถือจะไม่ถูกลบหรือแตะต้องใดๆ)
+        <p className="text-xs text-rose-200/70 leading-relaxed">
+          ลบเฉพาะรายการสลิปและข้อมูลที่บันทึกไว้ในตัวแอป (รูปภาพสลิปจริงในแกลเลอรีมือถือของคุณจะไม่ถูกลบหรือแตะต้องอย่างแน่นอน 100%)
         </p>
 
         <button
@@ -253,21 +211,21 @@ export default function SettingsView({
               setShowConfirmClear(true);
             }
           }}
-          className="w-full py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-98 text-white text-xs font-bold transition-all shadow-sm shadow-rose-600/20 flex items-center justify-center gap-1.5"
+          className="w-full py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-98 text-white text-xs font-bold transition-all shadow-md shadow-rose-600/30 flex items-center justify-center gap-1.5"
         >
           <Trash2 className="w-4 h-4" />
           <span>ล้างแอปทั้งหมด (Reset App)</span>
         </button>
 
         {showConfirmClear && (
-          <div className="p-3 bg-white rounded-2xl border border-rose-300 flex flex-col gap-2 mt-2 animate-fade-in">
-            <span className="text-xs font-bold text-rose-800">
-              ⚠️ แน่ใจหรือไม่? ข้อมูลรายจ่ายทั้งหมดจะถูกลบและกู้คืนไม่ได้
+          <div className="p-3 bg-neutral-900 rounded-2xl border border-rose-500/50 flex flex-col gap-2 mt-2 animate-fade-in">
+            <span className="text-xs font-bold text-rose-300">
+              ⚠️ แน่ใจหรือไม่? ข้อมูลรายจ่ายทั้งหมดในแอปจะถูกลบ
             </span>
             <div className="flex gap-2">
               <button
                 onClick={() => setShowConfirmClear(false)}
-                className="flex-1 py-1.5 text-xs text-neutral-600 bg-neutral-100 hover:bg-neutral-200 rounded-xl"
+                className="flex-1 py-1.5 text-xs text-neutral-300 bg-neutral-800 hover:bg-neutral-700 rounded-xl"
               >
                 ยกเลิก
               </button>
@@ -286,16 +244,16 @@ export default function SettingsView({
         )}
       </div>
 
-      {/* About Pygmy & Credits */}
-      <div className="text-center py-4 text-xs text-neutral-400 space-y-1">
-        <p className="font-semibold text-neutral-600">
-          Pygmy: No-Track Tracker v1.0.2 (Android Edition)
+      {/* About SlipSense */}
+      <div className="text-center py-4 text-xs text-neutral-500 space-y-1">
+        <p className="font-extrabold text-neutral-300">
+          SlipSense v2.0.0 (Smart Slip & Wealth Intelligence)
         </p>
-        <p className="text-[11px]">
-          แนวคิดจากแอป iOS <b>"Pygmy: จดรายจ่ายแบบไม่จด"</b> โดย Peerasak Unsakon
+        <p className="text-[11px] text-neutral-400">
+          On-Device Machine Learning & Privacy-First Architecture
         </p>
-        <p className="text-[10px] text-neutral-400">
-          ประมวลผลออฟไลน์ในเครื่อง • รองรับสลิปธนาคารไทย
+        <p className="text-[10px] text-neutral-500">
+          รองรับสลิปธนาคารไทยทุกแห่ง • ปลอดภัย 100% ไม่ส่งข้อมูลออกนอกเครื่อง
         </p>
       </div>
     </div>

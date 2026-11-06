@@ -12,6 +12,7 @@ export default function SettingsView({
   onExportBackup,
   onImportBackup,
   onClearAllData,
+  onClearAndRescan,
   onClearMerchantRules,
 }) {
   const [showConfirmClear, setShowConfirmClear] = useState(false);
@@ -194,6 +195,31 @@ export default function SettingsView({
           )}
         </div>
       </div>
+
+      {/* Re-Scan & Reset Action */}
+      {onClearAndRescan && (
+        <div className="bg-white rounded-3xl p-4 border border-neutral-200/80 shadow-xs space-y-2">
+          <div className="flex items-center justify-between">
+            <h4 className="font-extrabold text-xs text-amber-700 uppercase tracking-wide flex items-center gap-1.5">
+              <RefreshCw className="w-3.5 h-3.5 text-amber-600" />
+              <span>รีเซ็ต & กวาดสแกนสลิปใหม่</span>
+            </h4>
+          </div>
+          <p className="text-xs text-neutral-500 leading-relaxed">
+            หากมีรูปอื่นปะปน หรือต้องการให้ AI คัดกรองตรวจจับเฉพาะสลิปโอนเงินจริงจากเครื่องใหม่ทั้งหมด สามารถแตะปุ่มนี้เพื่อเริ่มใหม่แบบคลีนได้ทันที
+          </p>
+          <button
+            onClick={() => {
+              sound.playPop();
+              onClearAndRescan();
+            }}
+            className="w-full py-2.5 px-4 rounded-xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold transition-all active:scale-98 flex items-center justify-center gap-1.5"
+          >
+            <RefreshCw className="w-4 h-4 text-amber-700" />
+            ล้างรายการเก่าแล้วสแกนสลิปใหม่ทั้งหมด
+          </button>
+        </div>
+      )}
 
       {/* Danger Zone: Clear Data */}
       <div className="bg-white rounded-3xl p-4 border border-neutral-200/80 shadow-xs">

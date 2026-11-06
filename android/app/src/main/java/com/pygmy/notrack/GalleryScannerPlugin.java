@@ -134,7 +134,7 @@ public class GalleryScannerPlugin extends Plugin {
                 }
 
                 long nowSec = System.currentTimeMillis() / 1000;
-                JSObject slipObj = analyzeBitmap(bmp, System.currentTimeMillis(), fileName, "manual", nowSec, true);
+                JSObject slipObj = processBitmapStrict(bmp, System.currentTimeMillis(), fileName, "manual", nowSec, true);
                 bmp.recycle();
 
                 JSObject res = new JSObject();
@@ -170,7 +170,7 @@ public class GalleryScannerPlugin extends Plugin {
     private void executeGalleryScan(PluginCall call) {
         new Thread(() -> {
             try {
-                int limit = call.getInt("limit", 500);
+                int limit = call.getInt("limit", 400);
 
                 ContentResolver resolver = getContext().getContentResolver();
                 Uri collection;
@@ -190,10 +190,10 @@ public class GalleryScannerPlugin extends Plugin {
                 String sortOrder = MediaStore.Images.Media.DATE_ADDED + " DESC";
 
                 List<CandidateMedia> bankFolderList = new ArrayList<>();
-                List<CandidateMedia> generalList = new ArrayList<>();
+                List<CandidateMedia> screenshotsAndOthersList = new ArrayList<>();
                 Set<Long> seenIds = new HashSet<>();
 
-                // Stage 1: Explicitly search for bank folders across all storage (K PLUS, SCB, NEXT, KMA, ttb, etc.)
+                // Stage 1: Explicitly scan bank folders first (K PLUS, SCB, NEXT, KMA, ttb, etc.)
                 String bankKeywordsSelection =
                     MediaStore.Images.Media.BUCKET_DISPLAY_NAME + " LIKE ? OR " +
                     MediaStore.Images.Media.BUCKET_DISPLAY_NAME + " LIKE ? OR " +
@@ -236,7 +236,7 @@ public class GalleryScannerPlugin extends Plugin {
                     }
                 }
 
-                // Stage 2: Also scan recent photos from Screenshots, Downloads, Camera (up to 350 images)
+                // Stage 2: Scan recent photos from Screenshots & Downloads (up to 200 images)
                 try (Cursor cursor = resolver.query(collection, projection, null, null, sortOrder)) {
                     if (cursor != null) {
                         int idCol = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID);
@@ -245,7 +245,7 @@ public class GalleryScannerPlugin extends Plugin {
                         int dateCol = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_ADDED);
 
                         int inspectedGeneral = 0;
-                        while (cursor.moveToNext() && inspectedGeneral < 350) {
+                        while (cursor.moveToNext() && inspectedGeneral < 200) {
                             inspectedGeneral++;
                             long id = cursor.getLong(idCol);
                             if (seenIds.contains(id)) continue;
@@ -257,14 +257,21 @@ public class GalleryScannerPlugin extends Plugin {
                             cm.bucket = bucketCol >= 0 ? cursor.getString(bucketCol) : "";
                             cm.dateAdded = cursor.getLong(dateCol);
                             cm.isBankSource = isKnownBankOrSlipSource(cm.name, cm.bucket);
-                            generalList.add(cm);
+
+                            // Only examine screenshots, downloads, or slip files in general scan
+                            String lowerBucket = cm.bucket.toLowerCase(Locale.ROOT);
+                            String lowerName = (cm.name != null ? cm.name : "").toLowerCase(Locale.ROOT);
+                            if (cm.isBankSource || lowerBucket.contains("screenshot") || lowerBucket.contains("download") ||
+                                lowerName.contains("screenshot") || lowerName.contains("slip")) {
+                                screenshotsAndOthersList.add(cm);
+                            }
                         }
                     }
                 }
 
-                // Combine: Bank folder candidates first, then general candidates
+                // Combine: Bank album photos first, then screenshot/download candidates
                 List<CandidateMedia> finalQueue = new ArrayList<>(bankFolderList);
-                for (CandidateMedia cm : generalList) {
+                for (CandidateMedia cm : screenshotsAndOthersList) {
                     if (finalQueue.size() >= limit) break;
                     finalQueue.add(cm);
                 }
@@ -285,7 +292,7 @@ public class GalleryScannerPlugin extends Plugin {
                     }
                 }
 
-                Log.d(TAG, "Scanned " + scannedCount + " total images (bankFolderMatch=" + bankFolderList.size() + "), found " + parsedSlips.length() + " slips");
+                Log.d(TAG, "Examined " + scannedCount + " images, found " + parsedSlips.length() + " authentic slips");
 
                 JSObject res = new JSObject();
                 res.put("success", true);
@@ -342,7 +349,7 @@ public class GalleryScannerPlugin extends Plugin {
 
             if (bmp == null) return null;
 
-            return analyzeBitmap(bmp, id, fileName, bucketName, dateAddedSec, isBankSource);
+            return processBitmapStrict(bmp, id, fileName, bucketName, dateAddedSec, isBankSource);
 
         } catch (Exception e) {
             Log.w(TAG, "processImageUri error: " + e.getMessage());
@@ -354,11 +361,17 @@ public class GalleryScannerPlugin extends Plugin {
         }
     }
 
-    private JSObject analyzeBitmap(Bitmap bmp, long id, String fileName, String bucketName, long dateAddedSec, boolean forceAcceptIfHasAmount) {
-        // 1. QR Code Analysis (EMVCo SlipVerify format)
+    /**
+     * Strict Slip Verification Engine:
+     * Eliminates false positives (photos of dogs, nature, food, general screenshots)
+     * and strictly extracts authentic bank e-slips only.
+     */
+    private JSObject processBitmapStrict(Bitmap bmp, long id, String fileName, String bucketName, long dateAddedSec, boolean isBankSource) {
         InputImage inputImage = InputImage.fromBitmap(bmp, 0);
+
+        // 1. Scan QR code
         String qrPayload = "";
-        String qrDetectedBank = null;
+        String qrBankId = null;
         String qrRefCode = null;
 
         if (barcodeScanner != null) {
@@ -368,7 +381,7 @@ public class GalleryScannerPlugin extends Plugin {
                     String raw = b.getRawValue();
                     if (raw != null && !raw.isEmpty()) {
                         qrPayload = raw;
-                        qrDetectedBank = detectBankFromQR(raw);
+                        qrBankId = detectBankFromQR(raw);
                         qrRefCode = extractRefFromQR(raw);
                         break;
                     }
@@ -376,7 +389,7 @@ public class GalleryScannerPlugin extends Plugin {
             } catch (Exception ignored) {}
         }
 
-        // 2. OCR Text Analysis
+        // 2. Scan OCR text
         String ocrText = "";
         if (textRecognizer != null) {
             try {
@@ -385,47 +398,82 @@ public class GalleryScannerPlugin extends Plugin {
             } catch (Exception ignored) {}
         }
 
-        // 3. Dominant Bank Color Analysis (HSV Hue clustering on saturated pixels)
-        String colorBank = detectBankFromHeaderHSV(bmp);
+        // 3. Strict Slip Verification Gate
+        boolean hasSlipVerifyQR = !qrPayload.isEmpty() && isAuthenticSlipQR(qrPayload);
+        double extractedAmount = extractStrictDecimalAmount(ocrText);
 
-        // 4. Folder or Filename Bank Detection
+        // An authentic slip MUST have a decimal amount found on the image (e.g. 145.00, 1,280.50)
+        // If no decimal amount was read, and no valid slip QR was found, IT IS NOT A SLIP!
+        if (extractedAmount <= 0.0 && !hasSlipVerifyQR) {
+            return null;
+        }
+
+        // Check supporting structural evidence:
+        boolean hasMaskedAcc = Pattern.compile("(?i)[xX*]{2,}[-\\s]?[xX*0-9-]{3,}").matcher(ocrText).find();
+        boolean hasTime = Pattern.compile("\\b[0-2]?[0-9]:[0-5][0-9]\\b").matcher(ocrText).find();
+        boolean hasTransferKeywords = hasSlipKeywords(ocrText);
+        boolean hasRefCode = Pattern.compile("(?i)(?:Ref|Transaction ID|Trans ID|เลขที่|รหัส)[:\\s]*[A-Za-z0-9]{10,}").matcher(ocrText).find();
+
+        int evidenceScore = 0;
+        if (hasSlipVerifyQR) evidenceScore += 4;
+        if (isBankSource) evidenceScore += 2;
+        if (extractedAmount > 0.0) evidenceScore += 2;
+        if (hasMaskedAcc) evidenceScore += 2;
+        if (hasTransferKeywords) evidenceScore += 2;
+        if (hasTime) evidenceScore += 1;
+        if (hasRefCode) evidenceScore += 2;
+
+        // Requires at least Score >= 3 (e.g. valid QR, OR Amount + Bank Folder, OR Amount + Masked Account + Keywords)
+        // General photos of food/nature score 0 and are instantly discarded!
+        if (evidenceScore < 3) {
+            return null;
+        }
+
+        // If amount was not found in OCR text but we have a valid slip QR, use fallback amount if possible, else skip
+        if (extractedAmount <= 0.0) {
+            return null; // A financial tracker cannot track transactions with 0 baht
+        }
+
+        // 4. Determine Bank ID with strict priority
         String folderBank = detectBankFromFolderOrFile(fileName, bucketName);
+        String textBank = detectBankFromOCRText(ocrText);
+        String colorBank = detectBankFromConcentratedLogoHSV(bmp);
 
-        // Determine final Bank ID with priority:
-        // Priority 1: Official SlipVerify QR code payload (100% standard)
-        // Priority 2: Distinct Bank Folder / Filename (e.g. Pictures/K PLUS, SCB_*.jpg)
-        // Priority 3: OCR Latin Keywords (e.g. SCB, KBank, Krungthai)
-        // Priority 4: Dominant Header HSV Color
-        String ocrBank = detectBankFromOCRText(ocrText);
         String finalBankId = "KBANK";
-        if (qrDetectedBank != null) {
-            finalBankId = qrDetectedBank;
+        if (qrBankId != null) {
+            finalBankId = qrBankId;
         } else if (folderBank != null) {
             finalBankId = folderBank;
-        } else if (ocrBank != null) {
-            finalBankId = ocrBank;
+        } else if (textBank != null) {
+            finalBankId = textBank;
         } else if (colorBank != null) {
             finalBankId = colorBank;
         }
 
-        boolean isSlipCandidate = forceAcceptIfHasAmount
-            || !qrPayload.isEmpty()
-            || isKnownBankOrSlipSource(fileName, bucketName)
-            || isSlipByContent(ocrText, qrPayload, colorBank);
+        // 5. Parse Dates, Times, Payees
+        long nowSec = System.currentTimeMillis() / 1000;
+        long effectiveSec = (dateAddedSec > 1500000000L && dateAddedSec <= nowSec + 86400) ? dateAddedSec : nowSec;
+        Date dateObj = new Date(effectiveSec * 1000);
+        SimpleDateFormat ymdFormat = new SimpleDateFormat("yyyy-MM-dd", Locale.US);
+        SimpleDateFormat hmFormat = new SimpleDateFormat("HH:mm", Locale.US);
 
-        if (!isSlipCandidate) {
-            return null;
+        String date = ymdFormat.format(dateObj);
+        String time = hmFormat.format(dateObj);
+
+        Matcher tm = Pattern.compile("\\b([0-2]?[0-9]:[0-5][0-9])\\b").matcher(ocrText);
+        if (tm.find()) {
+            String rawT = tm.group(1);
+            time = rawT.length() == 4 ? "0" + rawT : rawT;
         }
 
-        ParsedSlip parsed = parseSlipData(ocrText, qrPayload, qrRefCode, fileName, bucketName, dateAddedSec, finalBankId);
-        if (parsed.amount <= 0) {
-            return null;
-        }
+        String ref = qrRefCode != null ? qrRefCode : extractRefCodeFromText(ocrText, finalBankId, id, effectiveSec);
+        String payee = extractSmartPayee(ocrText, finalBankId);
+        String categoryId = matchCategoryByPayee(payee);
 
-        // Create clean thumbnail
+        // Generate thumbnail
         String thumbBase64 = "";
         try {
-            int thumbW = 240;
+            int thumbW = 220;
             int thumbH = (int) ((float) bmp.getHeight() / bmp.getWidth() * thumbW);
             Bitmap thumb = Bitmap.createScaledBitmap(bmp, thumbW, Math.max(10, thumbH), true);
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -436,32 +484,99 @@ public class GalleryScannerPlugin extends Plugin {
 
         JSObject slipObj = new JSObject();
         slipObj.put("id", "slip_" + id);
-        slipObj.put("bankId", parsed.bankId);
-        slipObj.put("amount", parsed.amount);
-        slipObj.put("payee", parsed.payee);
-        slipObj.put("sender", parsed.sender);
-        slipObj.put("date", parsed.date);
-        slipObj.put("time", parsed.time);
-        slipObj.put("timestamp", dateAddedSec * 1000);
-        slipObj.put("ref", parsed.ref);
-        slipObj.put("categoryId", parsed.categoryId);
+        slipObj.put("bankId", finalBankId);
+        slipObj.put("amount", extractedAmount);
+        slipObj.put("payee", payee);
+        slipObj.put("sender", "บัญชีของฉัน");
+        slipObj.put("date", date);
+        slipObj.put("time", time);
+        slipObj.put("timestamp", effectiveSec * 1000);
+        slipObj.put("ref", ref);
+        slipObj.put("categoryId", categoryId);
         slipObj.put("slipThumbnail", thumbBase64);
         slipObj.put("rawOcrText", ocrText);
         slipObj.put("isManual", false);
 
-        Log.d(TAG, "Found Slip: Bank=" + parsed.bankId + " Amt=" + parsed.amount + " Date=" + parsed.date + " Payee=" + parsed.payee);
-
+        Log.d(TAG, "VERIFIED SLIP: Bank=" + finalBankId + " Amount=" + extractedAmount + " Date=" + date + " Payee=" + payee);
         return slipObj;
     }
 
     /**
+     * Strict Decimal Amount Parser:
+     * Extracts ONLY numbers formatted as amounts with 2 decimal places (e.g. 145.00, 1,280.50).
+     * Rejects standalone years (2024, 2025, 2026, 2567, 2568, 2569) and filename numbers.
+     */
+    private double extractStrictDecimalAmount(String text) {
+        if (text == null || text.isEmpty()) return 0.0;
+
+        Pattern decPattern = Pattern.compile("\\b([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{1,6})\\s*\\.\\s*([0-9]{2})\\b");
+        Matcher m = decPattern.matcher(text);
+
+        List<Double> candidateAmounts = new ArrayList<>();
+        while (m.find()) {
+            try {
+                String intPart = m.group(1).replace(",", "").trim();
+                String decPart = m.group(2).trim();
+                double val = Double.parseDouble(intPart + "." + decPart);
+
+                // Reject years and unreasonable values
+                if (val >= 1.0 && val < 500000.0 &&
+                    val != 2024.0 && val != 2025.0 && val != 2026.0 &&
+                    val != 2567.0 && val != 2568.0 && val != 2569.0) {
+                    candidateAmounts.add(val);
+                }
+            } catch (Exception ignored) {}
+        }
+
+        if (candidateAmounts.isEmpty()) return 0.0;
+
+        // Prefer amount near explicit keywords (จำนวนเงิน, ยอดเงิน, Amount, บาท, THB)
+        String[] lines = text.split("\n");
+        for (String line : lines) {
+            String lower = line.toLowerCase(Locale.ROOT);
+            if (lower.contains("จำนวน") || lower.contains("ยอด") || lower.contains("amount") ||
+                lower.contains("baht") || lower.contains("thb") || lower.contains("บาท")) {
+                Matcher lm = decPattern.matcher(line);
+                if (lm.find()) {
+                    try {
+                        String intPart = lm.group(1).replace(",", "").trim();
+                        String decPart = lm.group(2).trim();
+                        double val = Double.parseDouble(intPart + "." + decPart);
+                        if (val >= 1.0 && val < 500000.0 && val != 2024.0 && val != 2025.0 && val != 2026.0) {
+                            return val;
+                        }
+                    } catch (Exception ignored) {}
+                }
+            }
+        }
+
+        // Return first valid decimal amount
+        return candidateAmounts.get(0);
+    }
+
+    private boolean isAuthenticSlipQR(String qr) {
+        if (qr == null || qr.length() < 16) return false;
+        // PromptPay SlipVerify Mini-QR starts with 00 or has 000001 / 0103
+        return qr.contains("000001") || qr.contains("0103") || qr.startsWith("000201") || qr.contains("A000000677");
+    }
+
+    private boolean hasSlipKeywords(String text) {
+        String lower = text.toLowerCase(Locale.ROOT);
+        return lower.contains("transfer") || lower.contains("successful") || lower.contains("success") ||
+               lower.contains("promptpay") || lower.contains("baht") || lower.contains("thb") ||
+               lower.contains("amount") || lower.contains("transaction") || lower.contains("k plus") ||
+               lower.contains("scb") || lower.contains("krungthai") || lower.contains("krungsri") ||
+               lower.contains("ttb") || lower.contains("bualuang") || lower.contains("ref") ||
+               lower.contains("paid") || lower.contains("payment") || lower.contains("scan");
+    }
+
+    /**
      * Decode Bank of Thailand (BOT) 3-digit code from SlipVerify QR payloads
-     * Format: 0055...0103[BOT_CODE]02...
+     * Format: ...0103[BOT_CODE]02...
      */
     private static String detectBankFromQR(String qr) {
         if (qr == null || qr.isEmpty()) return null;
 
-        // Subtag 01 Length 03: 0103[004|014|006|025|011|002|030|069|104]
         Pattern p = Pattern.compile("0103(\\d{3})");
         Matcher m = p.matcher(qr);
         if (m.find()) {
@@ -470,16 +585,16 @@ public class GalleryScannerPlugin extends Plugin {
             if (b != null) return b;
         }
 
-        // Direct fallback code search
-        if (qr.contains("0004") || qr.contains("0040") || qr.contains("KBANK")) return "KBANK";
-        if (qr.contains("0014") || qr.contains("0140") || qr.contains("SCB")) return "SCB";
-        if (qr.contains("0006") || qr.contains("0060") || qr.contains("KTB")) return "KTB";
-        if (qr.contains("0025") || qr.contains("0250") || qr.contains("BAY")) return "BAY";
-        if (qr.contains("0011") || qr.contains("0110") || qr.contains("TTB")) return "TTB";
-        if (qr.contains("0002") || qr.contains("0020") || qr.contains("BBL")) return "BBL";
-        if (qr.contains("0030") || qr.contains("0300") || qr.contains("GSB")) return "GSB";
-        if (qr.contains("0069") || qr.contains("0690") || qr.contains("DIME")) return "DIME";
-        if (qr.contains("0104") || qr.contains("1040") || qr.contains("TRUEMONEY")) return "TRUEMONEY";
+        // Direct code fallback
+        if (qr.contains("0004") || qr.contains("0040")) return "KBANK";
+        if (qr.contains("0014") || qr.contains("0140")) return "SCB";
+        if (qr.contains("0006") || qr.contains("0060")) return "KTB";
+        if (qr.contains("0025") || qr.contains("0250")) return "BAY";
+        if (qr.contains("0011") || qr.contains("0110")) return "TTB";
+        if (qr.contains("0002") || qr.contains("0020")) return "BBL";
+        if (qr.contains("0030") || qr.contains("0300")) return "GSB";
+        if (qr.contains("0069") || qr.contains("0690")) return "DIME";
+        if (qr.contains("0104") || qr.contains("1040")) return "TRUEMONEY";
 
         return null;
     }
@@ -548,13 +663,14 @@ public class GalleryScannerPlugin extends Plugin {
     }
 
     /**
-     * Accurate Bank Detection via HSV Hue Clustering on Saturated Header Pixels
-     * Works even if the slip background is white and only the logo has color!
+     * Accurate HSV Logo Color Detection:
+     * Requires HIGH concentration (>= 350 saturated pixels) in header area.
+     * Prevents false positives from nature/food photos.
      */
-    private String detectBankFromHeaderHSV(Bitmap bmp) {
+    private String detectBankFromConcentratedLogoHSV(Bitmap bmp) {
         try {
             int w = bmp.getWidth();
-            int h = Math.max(10, (int) (bmp.getHeight() * 0.28));
+            int h = Math.max(10, (int) (bmp.getHeight() * 0.25));
             int step = Math.max(2, w / 40);
 
             int kbankGreen = 0;
@@ -576,141 +692,55 @@ public class GalleryScannerPlugin extends Plugin {
 
                     int max = Math.max(r, Math.max(g, b));
                     int min = Math.min(r, Math.min(g, b));
-                    if (max - min < 28) continue; // Skip white, gray, black paper
+                    if (max - min < 35) continue; // Skip paper, gray, white, black
 
                     Color.RGBToHSV(r, g, b, hsv);
                     float hue = hsv[0];
                     float sat = hsv[1];
                     float val = hsv[2];
 
-                    if (sat < 0.28f || val < 0.20f || val > 0.98f) continue;
+                    if (sat < 0.35f || val < 0.20f || val > 0.95f) continue;
 
-                    if (hue >= 85 && hue <= 165) kbankGreen++;
-                    else if (hue >= 250 && hue <= 300) scbPurple++;
-                    else if (hue >= 175 && hue <= 218) ktbCyan++;
-                    else if (hue >= 38 && hue <= 68) bayYellow++;
-                    else if (hue >= 219 && hue <= 248) bblNavy++;
-                    else if (hue >= 305 && hue <= 350) gsbPink++;
-                    else if (hue >= 12 && hue <= 37) orangeColor++;
+                    if (hue >= 90 && hue <= 160) kbankGreen++;
+                    else if (hue >= 255 && hue <= 295) scbPurple++;
+                    else if (hue >= 178 && hue <= 215) ktbCyan++;
+                    else if (hue >= 40 && hue <= 65) bayYellow++;
+                    else if (hue >= 220 && hue <= 245) bblNavy++;
+                    else if (hue >= 310 && hue <= 345) gsbPink++;
+                    else if (hue >= 15 && hue <= 36) orangeColor++;
                 }
             }
 
-            int minThreshold = 25;
-            if (scbPurple > minThreshold && scbPurple > kbankGreen && scbPurple > ktbCyan) return "SCB";
-            if (kbankGreen > minThreshold && kbankGreen > scbPurple && kbankGreen > ktbCyan) return "KBANK";
-            if (ktbCyan > minThreshold && ktbCyan > kbankGreen) return "KTB";
-            if (bayYellow > minThreshold && bayYellow > kbankGreen) return "BAY";
-            if (gsbPink > minThreshold) return "GSB";
-            if (orangeColor > minThreshold) return "TRUEMONEY";
-            if (bblNavy > minThreshold) return "BBL";
+            int strictThreshold = 350;
+            if (scbPurple >= strictThreshold && scbPurple > kbankGreen) return "SCB";
+            if (kbankGreen >= strictThreshold && kbankGreen > scbPurple) return "KBANK";
+            if (ktbCyan >= strictThreshold) return "KTB";
+            if (bayYellow >= strictThreshold) return "BAY";
+            if (gsbPink >= strictThreshold) return "GSB";
+            if (orangeColor >= strictThreshold) return "TRUEMONEY";
+            if (bblNavy >= strictThreshold) return "BBL";
 
         } catch (Exception ignored) {}
         return null;
     }
 
-    private boolean isSlipByContent(String text, String qr, String colorBank) {
-        String lower = text.toLowerCase(Locale.ROOT);
-
-        if (!qr.isEmpty()) return true;
-        if (colorBank != null) return true;
-
-        if (lower.contains("transfer") || lower.contains("successful") || lower.contains("amount") ||
-            lower.contains("baht") || lower.contains("thb") || lower.contains("promptpay") ||
-            lower.contains("transaction") || lower.contains("ref")) {
-            return true;
+    private String extractRefCodeFromText(String text, String bankId, long id, long effectiveSec) {
+        Pattern refPattern = Pattern.compile("(?i)(?:Ref|Transaction ID|Trans ID|เลขที่รายการ|รหัสอ้างอิง)[:\\s]*([A-Za-z0-9]{10,35})");
+        Matcher rm = refPattern.matcher(text);
+        if (rm.find()) {
+            return rm.group(1);
         }
 
-        boolean hasDecimal = Pattern.compile("\\b([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{1,6})\\s*\\.\\s*[0-9]{2}\\b").matcher(text).find();
-        boolean hasTime = Pattern.compile("\\b[0-2]?[0-9][:][0-5][0-9]\\b").matcher(text).find();
-        boolean hasMaskedAcc = Pattern.compile("(?i)[xX*]{2,}[-\\s]?[xX*0-9-]{3,}").matcher(text).find();
+        Pattern tokenRef = Pattern.compile("\\b(?=[A-Za-z0-9]*\\d)[A-Za-z0-9]{14,35}\\b");
+        Matcher tm = tokenRef.matcher(text);
+        if (tm.find()) {
+            return tm.group(0);
+        }
 
-        return hasDecimal && (hasTime || hasMaskedAcc);
+        return bankId + "_" + effectiveSec + "_" + id;
     }
 
-    private static class ParsedSlip {
-        String bankId = "KBANK";
-        double amount = 0.0;
-        String payee = "โอนเงินผ่านระบบ";
-        String sender = "บัญชีของฉัน";
-        String date = "";
-        String time = "12:00";
-        String ref = "";
-        String categoryId = "food";
-    }
-
-    private ParsedSlip parseSlipData(String text, String qr, String qrRef, String fileName, String bucketName, long dateAddedSec, String finalBankId) {
-        ParsedSlip p = new ParsedSlip();
-        p.bankId = finalBankId != null ? finalBankId : "KBANK";
-
-        // 1. Amount Extraction
-        Pattern generalDec = Pattern.compile("\\b([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{1,6})\\s*\\.\\s*([0-9]{2})\\b");
-        Matcher m2 = generalDec.matcher(text);
-        List<Double> candidates = new ArrayList<>();
-        while (m2.find()) {
-            try {
-                String intPart = m2.group(1).replace(",", "").trim();
-                String decPart = m2.group(2).trim();
-                double val = Double.parseDouble(intPart + "." + decPart);
-                if (val > 0 && val < 1000000 && val != 2024 && val != 2025 && val != 2026 && val != 2567 && val != 2568 && val != 2569) {
-                    candidates.add(val);
-                }
-            } catch (Exception ignored) {}
-        }
-
-        if (!candidates.isEmpty()) {
-            p.amount = candidates.get(0);
-        } else {
-            Matcher fnAmt = Pattern.compile("([0-9]{2,5})(?:\\.[0-9]{2})?").matcher(fileName != null ? fileName : "");
-            if (fnAmt.find()) {
-                try {
-                    double v = Double.parseDouble(fnAmt.group(1));
-                    if (v > 0 && v < 100000 && v != 2024 && v != 2025 && v != 2026) {
-                        p.amount = v;
-                    }
-                } catch (Exception ignored) {}
-            }
-        }
-
-        // 2. Date & Time
-        long nowSec = System.currentTimeMillis() / 1000;
-        long effectiveSec = (dateAddedSec > 1500000000L && dateAddedSec <= nowSec + 86400) ? dateAddedSec : nowSec;
-        Date dateObj = new Date(effectiveSec * 1000);
-        SimpleDateFormat ymdFormat = new SimpleDateFormat("yyyy-MM-dd", Locale.US);
-        SimpleDateFormat hmFormat = new SimpleDateFormat("HH:mm", Locale.US);
-
-        p.date = ymdFormat.format(dateObj);
-        p.time = hmFormat.format(dateObj);
-
-        Pattern timePattern = Pattern.compile("\\b([0-2]?[0-9]:[0-5][0-9])\\b");
-        Matcher timeMatcher = timePattern.matcher(text);
-        if (timeMatcher.find()) {
-            String rawTime = timeMatcher.group(1);
-            if (rawTime.length() == 4) rawTime = "0" + rawTime;
-            p.time = rawTime;
-        }
-
-        // 3. Reference Code
-        if (qrRef != null && !qrRef.isEmpty()) {
-            p.ref = qrRef;
-        } else {
-            Pattern refPattern = Pattern.compile("(?i)(?:Ref|Transaction ID|Trans ID)[:\\s]*([A-Za-z0-9]{10,35})");
-            Matcher refMatcher = refPattern.matcher(text);
-            if (refMatcher.find()) {
-                p.ref = refMatcher.group(1);
-            } else {
-                Pattern tokenRef = Pattern.compile("\\b(?=[A-Za-z0-9]*\\d)[A-Za-z0-9]{12,35}\\b");
-                Matcher tm = tokenRef.matcher(text);
-                if (tm.find()) {
-                    p.ref = tm.group(0);
-                } else if (!qr.isEmpty()) {
-                    p.ref = "QR" + Math.abs(qr.hashCode());
-                } else {
-                    p.ref = p.bankId + "_" + idFromFile(fileName, effectiveSec);
-                }
-            }
-        }
-
-        // 4. Payee Extraction
+    private String extractSmartPayee(String text, String bankId) {
         String[] lines = text.split("\n");
         int firstMaskedIdx = -1;
         for (int i = 0; i < lines.length; i++) {
@@ -725,7 +755,6 @@ public class GalleryScannerPlugin extends Plugin {
             String trimmed = lines[i].trim();
             if (trimmed.length() < 3) continue;
             if (trimmed.contains(":")) continue;
-            if (!p.ref.isEmpty() && trimmed.replace(" ", "").contains(p.ref)) continue;
             if (trimmed.matches("(?i).*[xX*]{2,}[-\\s]?[xX*0-9-]{3,}.*")) continue;
             if (trimmed.matches(".*[0-9]+\\.[0-9]{2}.*")) continue;
             if (trimmed.matches(".*[0-2]?[0-9]:[0-5][0-9].*")) continue;
@@ -742,51 +771,52 @@ public class GalleryScannerPlugin extends Plugin {
             String candidate = cleanBrand.toString().trim();
             String up = candidate.toUpperCase(Locale.ROOT);
             if (candidate.length() >= 3 && !up.equals("K PLUS") && !up.equals("SCB EASY") && !up.equals("KBANK") && !up.equals("SCB")) {
-                p.payee = candidate;
-                break;
+                return candidate;
             }
         }
 
-        // Clear Bank-Specific Label if no specific shop name was found
-        if (p.payee.equals("โอนเงินผ่านระบบ") || p.payee.isEmpty()) {
-            switch (p.bankId) {
-                case "KBANK": p.payee = "กสิกรไทย (K PLUS)"; break;
-                case "SCB": p.payee = "ไทยพาณิชย์ (SCB EASY)"; break;
-                case "KTB": p.payee = "กรุงไทย (Krungthai NEXT)"; break;
-                case "BAY": p.payee = "กรุงศรีอยุธยา (KMA)"; break;
-                case "TTB": p.payee = "ทีเอ็มบีธนชาต (ttb touch)"; break;
-                case "BBL": p.payee = "กรุงเทพ (Bualuang mBanking)"; break;
-                case "GSB": p.payee = "ออมสิน (MyMo)"; break;
-                case "TRUEMONEY": p.payee = "ทรูมันนี่ (TrueMoney)"; break;
-                case "DIME": p.payee = "เกียรตินาคินภัทร (Dime!)"; break;
-                case "MAKE": p.payee = "MAKE by KBank"; break;
-                default: p.payee = "สแกนโอนจ่าย QR"; break;
-            }
+        // Check if there is a second masked account for the receiver
+        Matcher accMatcher = Pattern.compile("(?i)([xX*]{2,}[-\\s]?[xX*0-9-]{3,})").matcher(text);
+        List<String> accounts = new ArrayList<>();
+        while (accMatcher.find()) {
+            accounts.add(accMatcher.group(1));
+        }
+        if (accounts.size() >= 2) {
+            return "โอนไปยังบัญชี (" + accounts.get(1) + ")";
+        } else if (text.toLowerCase(Locale.ROOT).contains("promptpay") || text.contains("พร้อมเพย์")) {
+            return "โอนเงินพร้อมเพย์";
         }
 
-        // Categorize
-        String lowerPayee = p.payee.toLowerCase(Locale.ROOT);
-        if (lowerPayee.contains("cafe") || lowerPayee.contains("coffee") || lowerPayee.contains("อาหาร") ||
-            lowerPayee.contains("7-eleven") || lowerPayee.contains("cj") || lowerPayee.contains("kfc") ||
-            lowerPayee.contains("mcdonald") || lowerPayee.contains("starbucks") || lowerPayee.contains("amazon")) {
-            p.categoryId = "food";
-        } else if (lowerPayee.contains("ptt") || lowerPayee.contains("bpass") ||
-                   lowerPayee.contains("m-flow") || lowerPayee.contains("bts") || lowerPayee.contains("mrt") || lowerPayee.contains("grab")) {
-            p.categoryId = "transport";
-        } else if (lowerPayee.contains("shopee") || lowerPayee.contains("lazada") || lowerPayee.contains("uniqlo") ||
-                   lowerPayee.contains("mall") || lowerPayee.contains("shop") || lowerPayee.contains("lotus") || lowerPayee.contains("bigc")) {
-            p.categoryId = "shopping";
-        } else {
-            p.categoryId = "food";
+        // Friendly Default
+        switch (bankId) {
+            case "KBANK": return "โอนเงิน (K PLUS)";
+            case "SCB": return "โอนเงิน (SCB EASY)";
+            case "KTB": return "โอนเงิน (Krungthai NEXT)";
+            case "BAY": return "โอนเงิน (KMA กรุงศรี)";
+            case "TTB": return "โอนเงิน (ttb touch)";
+            case "BBL": return "โอนเงิน (Bualuang)";
+            case "GSB": return "โอนเงิน (MyMo)";
+            case "TRUEMONEY": return "โอนเงิน (TrueMoney)";
+            case "DIME": return "โอนเงิน (Dime!)";
+            case "MAKE": return "โอนเงิน (MAKE)";
+            default: return "โอนเงินสำเร็จ";
         }
-
-        return p;
     }
 
-    private String idFromFile(String fileName, long fallback) {
-        if (fileName != null && !fileName.isEmpty()) {
-            return fileName.replaceAll("[^A-Za-z0-9]", "");
+    private String matchCategoryByPayee(String payee) {
+        String lower = payee.toLowerCase(Locale.ROOT);
+        if (lower.contains("cafe") || lower.contains("coffee") || lower.contains("อาหาร") ||
+            lower.contains("7-eleven") || lower.contains("cj") || lower.contains("kfc") ||
+            lower.contains("mcdonald") || lower.contains("starbucks") || lower.contains("amazon")) {
+            return "food";
+        } else if (lower.contains("ptt") || lower.contains("bpass") ||
+                   lower.contains("m-flow") || lower.contains("bts") || lower.contains("mrt") || lower.contains("grab")) {
+            return "transport";
+        } else if (lower.contains("shopee") || lower.contains("lazada") || lower.contains("uniqlo") ||
+                   lower.contains("mall") || lower.contains("shop") || lower.contains("lotus") || lower.contains("bigc")) {
+            return "shopping";
+        } else {
+            return "food";
         }
-        return String.valueOf(fallback);
     }
 }

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import SummaryCards from '../components/SummaryCards';
 import GoatWidget from '../components/GoatWidget';
 import TransactionItem from '../components/TransactionItem';
-import { Camera, Plus, Sparkles, Receipt, Zap, Loader2, Calendar } from 'lucide-react';
+import { Camera, Plus, Sparkles, Receipt, Zap, Loader2, Calendar, RefreshCw } from 'lucide-react';
 import { sound } from '../utils/sound';
 import { SAMPLE_TEST_SLIPS } from '../utils/slipParser';
 
@@ -13,6 +13,7 @@ export default function HomeView({
   currentDate,
   isAutoScanning,
   onTriggerAutoScan,
+  onClearAndRescan,
   onOpenScanModal,
   onOpenManualModal,
   onOpenDetailModal,
@@ -185,8 +186,21 @@ export default function HomeView({
             <span>รายการใช้จ่าย</span>
           </h3>
 
-          {/* Segmented Scope Filter: เดือนนี้ vs ทั้งหมด */}
-          <div className="flex items-center bg-neutral-200/70 p-0.5 rounded-xl text-[11px] font-bold">
+          <div className="flex items-center gap-1.5">
+            {transactions.length > 0 && onClearAndRescan && (
+              <button
+                type="button"
+                onClick={onClearAndRescan}
+                title="ล้างรายการทั้งหมดแล้วกวาดเฉพาะสลิปจริงใหม่"
+                className="px-2 py-1 rounded-xl bg-neutral-100 hover:bg-neutral-200/80 active:scale-95 text-neutral-600 font-bold text-[10px] flex items-center gap-1 border border-neutral-200 transition-all"
+              >
+                <RefreshCw className="w-3 h-3 text-neutral-500" />
+                <span>ล้าง & สแกนใหม่</span>
+              </button>
+            )}
+
+            {/* Segmented Scope Filter: เดือนนี้ vs ทั้งหมด */}
+            <div className="flex items-center bg-neutral-200/70 p-0.5 rounded-xl text-[11px] font-bold">
             <button
               type="button"
               onClick={() => {
@@ -217,6 +231,7 @@ export default function HomeView({
             </button>
           </div>
         </div>
+      </div>
 
         {/* Empty State */}
         {sortedDates.length === 0 ? (

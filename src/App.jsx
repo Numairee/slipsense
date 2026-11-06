@@ -207,6 +207,57 @@ export default function App() {
     setGoatState(Storage.getGoatState());
   };
 
+  // Clear all and re-scan fresh from device gallery
+  const handleClearAndRescan = async () => {
+    sound.playPop();
+    const confirmed = window.confirm('ต้องการลบรายการทั้งหมดที่มีอยู่ แล้วสแกนค้นหาสลิปจริงใหม่ทั้งหมดใช่หรือไม่? (รูปถ่ายทั่วไปและภาพหน้าจออื่นๆ จะไม่ถูกนำเข้า)');
+    if (!confirmed) return;
+
+    Storage.saveTransactions([]);
+    setTransactions([]);
+
+    if (!AutoScanner.isNative()) {
+      setIsScanOpen(true);
+      return;
+    }
+
+    setIsAutoScanning(true);
+    const res = await AutoScanner.scanNativeGallery([], categories, merchantRules);
+    setIsAutoScanning(false);
+
+    if (res && res.success && res.newSlips && res.newSlips.length > 0) {
+      syncMonthToLatestSlip(res.newSlips);
+      const updated = Storage.addBatchTransactions(res.newSlips);
+      setTransactions(updated);
+      const newGoat = Storage.feedGoat(res.newSlips.length);
+      setGoatState(newGoat);
+
+      sound.playCrunch();
+      setTimeout(() => {
+        sound.playGoatBaa();
+        confetti({
+          particleCount: 50,
+          spread: 80,
+          origin: { y: 0.25 }
+        });
+      }, 300);
+
+      setScanToast({
+        title: `สแกนใหม่สำเร็จ พบสลิปจริง ${res.newSlips.length} ใบ! ✨`,
+        message: `คัดกรองเฉพาะสลิปโอนเงินจริงเรียบร้อยแล้ว`
+      });
+      setTimeout(() => setScanToast(null), 5000);
+    } else {
+      setScanToast({
+        title: 'ล้างข้อมูลเรียบร้อยแล้ว',
+        message: 'ไม่พบสลิปธนาคารใหม่ในเครื่อง หรือคุณสามารถกดเลือกรูปสลิปเองได้',
+        actionLabel: 'เลือกรูปสลิป',
+        onAction: () => setIsScanOpen(true)
+      });
+      setTimeout(() => setScanToast(null), 5500);
+    }
+  };
+
   // Clear merchant rules
   const handleClearMerchantRules = () => {
     localStorage.removeItem('pygmy_merchant_rules_v1');
@@ -247,6 +298,7 @@ export default function App() {
             currentDate={currentDate}
             isAutoScanning={isAutoScanning}
             onTriggerAutoScan={() => handleTriggerAutoScan(false)}
+            onClearAndRescan={handleClearAndRescan}
             onOpenScanModal={() => setIsScanOpen(true)}
             onOpenManualModal={() => setIsManualOpen(true)}
             onOpenDetailModal={(tx) => setActiveDetailTx(tx)}
@@ -290,6 +342,7 @@ export default function App() {
             onExportBackup={handleExportBackup}
             onImportBackup={handleImportBackup}
             onClearAllData={handleClearAll}
+            onClearAndRescan={handleClearAndRescan}
             onClearMerchantRules={handleClearMerchantRules}
           />
         )}

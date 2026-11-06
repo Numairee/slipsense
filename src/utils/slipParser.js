@@ -195,7 +195,30 @@ export async function parseSlipImage(file, merchantRules = {}, categories = []) 
             if (ocrParsed.refCode && !refCode) refCode = ocrParsed.refCode;
           }
 
-          if (!detectedBankId) detectedBankId = 'KBANK';
+          // Strict Verification Gatekeeper: Must have actual amount found in receipt text
+          const finalAmount = nativeSlip?.amount || ocrParsed?.amount || null;
+
+          if (!finalAmount || finalAmount <= 0) {
+            resolve({
+              success: false,
+              error: 'รูปภาพนี้ไม่ใช่สลิปโอนเงิน หรือไม่พบตัวเลขยอดเงินที่ชัดเจน'
+            });
+            return;
+          }
+
+          if (!detectedBankId) {
+            // Check if text has any general banking cues
+            const lower = rawOcrText.toLowerCase();
+            if (lower.includes('โอน') || lower.includes('transfer') || lower.includes('promptpay') || lower.includes('พร้อมเพย์')) {
+              detectedBankId = 'KBANK'; // Fallback to common Thai bank only if confirmed transaction
+            } else {
+              resolve({
+                success: false,
+                error: 'ไม่สามารถระบุธนาคารผู้ให้บริการหรือรูปแบบสลิปได้'
+              });
+              return;
+            }
+          }
 
           if (!refCode) {
             const rnd = Math.floor(100000 + Math.random() * 900000);
@@ -208,8 +231,6 @@ export async function parseSlipImage(file, merchantRules = {}, categories = []) 
           const todayStr = now.toISOString().split('T')[0];
           const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
 
-          // Merge Native ML Kit + Tesseract OCR results
-          const finalAmount = nativeSlip?.amount || ocrParsed?.amount || generateSuggestedAmount(file.name);
           const finalPayee = ocrParsed?.payee || nativeSlip?.payee || getSuggestedPayee(file.name, detectedBankId);
           const finalDate = ocrParsed?.date || nativeSlip?.date || todayStr;
           const finalTime = nativeSlip?.time || ocrParsed?.time || timeStr;
@@ -287,15 +308,6 @@ function getSuggestedPayee(filename = '', bankId = 'KBANK') {
     TRUEMONEY: 'TrueMoney สแกนจ่าย'
   };
   return bankNames[bankId] || 'โอนจ่ายสแกน QR';
-}
-
-function generateSuggestedAmount(filename = '') {
-  const match = filename.match(/(\d+)(?:[_\.](\d{2}))?/);
-  if (match && Number(match[1]) > 5 && Number(match[1]) < 50000) {
-    const val = Number(match[1]) + (match[2] ? Number(match[2]) / 100 : 0);
-    return Math.round(val * 100) / 100;
-  }
-  return 100.00;
 }
 
 export const SAMPLE_TEST_SLIPS = [

@@ -20,6 +20,7 @@ export default function ScanModal({
   const [extractedItems, setExtractedItems] = useState([]);
   const [dragOver, setDragOver] = useState(false);
   const [skipDuplicates, setSkipDuplicates] = useState(true);
+  const [rejectedCount, setRejectedCount] = useState(0);
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
 
@@ -48,6 +49,7 @@ export default function ScanModal({
     sound.playPop();
 
     const newItems = [];
+    let rejected = 0;
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       if (!file.type.startsWith('image/')) continue;
@@ -58,9 +60,14 @@ export default function ScanModal({
           ...res.data,
           isDuplicate: isDup
         });
+      } else {
+        rejected++;
       }
     }
 
+    if (rejected > 0) {
+      setRejectedCount(prev => prev + rejected);
+    }
     setExtractedItems(prev => [...newItems, ...prev]);
     setIsProcessing(false);
 
@@ -299,6 +306,23 @@ export default function ScanModal({
               })}
             </div>
           </div>
+
+          {/* Non-slip rejected notification */}
+          {rejectedCount > 0 && (
+            <div className="p-2.5 rounded-xl bg-neutral-100 border border-neutral-200 flex items-center justify-between text-xs text-neutral-600">
+              <span className="flex items-center gap-1.5 font-medium">
+                <AlertCircle className="w-4 h-4 text-neutral-500 shrink-0" />
+                คัดกรองรูปที่ไม่ใช่สลิปออกอัตโนมัติ ({rejectedCount} รูป)
+              </span>
+              <button
+                type="button"
+                onClick={() => setRejectedCount(0)}
+                className="text-[10px] text-neutral-400 hover:text-neutral-700"
+              >
+                ปิด
+              </button>
+            </div>
+          )}
 
           {/* Extracted Items Preview List */}
           {extractedItems.length > 0 && (

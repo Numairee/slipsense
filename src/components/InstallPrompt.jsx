@@ -32,8 +32,10 @@ export default function InstallPrompt() {
 
       <div className="flex items-center gap-1.5 shrink-0">
         <a
-          href="/Pygmy-iQOO15.apk"
+          href="https://github.com/Numairee/pygmy-android/releases/download/v1.0.2/Pygmy-iQOO15.apk"
           download="Pygmy-iQOO15.apk"
+          target="_blank"
+          rel="noopener noreferrer"
           className="px-3 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white font-extrabold text-xs hover:from-amber-600 hover:to-orange-600 active:scale-95 shadow-xs transition-all flex items-center gap-1.5"
         >
           <Download className="w-3.5 h-3.5" />

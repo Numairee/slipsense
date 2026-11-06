@@ -61,19 +61,20 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main'
         with:
-          tag_name: v1.0.0-apk
-          name: "Pygmy Android v1.0.0 (iQOO 15 Edition)"
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v1.0.2' }}
+          name: "Pygmy Android v1.0.2 (iQOO 15 Edition)"
           body: |
             ## 📱 Pygmy: No-Track Tracker APK for Android / iQOO 15
+            - **เวอร์ชัน:** v1.0.2 (อัปเดตระบบตรวจสอบสลิปเข้มงวด, ปุ่มล้างแอป Reset App และสวิตช์ปิดสแกนอัตโนมัติ)
             - **Target Phone:** iQOO 15 (Snapdragon 8 Elite, 144Hz AMOLED, OriginOS 5 / Android 15)
             - **Architecture:** `arm64-v8a` (64-bit)
             - **Core:** High-Performance Rust Core Engine
-            - **Privacy:** 100% Offline, On-Device MediaStore Auto-Slip Scanner
+            - **Privacy:** On-Device MediaStore Auto-Slip Scanner (ประมวลผลออฟไลน์ในเครื่อง ไม่ส่งออกภายนอก)
             
             ### 📥 วิธีติดตั้ง:
             1. ดาวน์โหลดไฟล์ `Pygmy-iQOO15.apk` ด้านล่างลงมือถือ
             2. แตะเปิดไฟล์เพื่อติดตั้ง (อนุญาต Install Unknown Apps หากระบบถาม)
-            3. ใช้งานได้ทันที 100% ไม่ต้องต่อเน็ต
+            3. เปิดใช้งานได้ทันที ไม่ต้องต่อเน็ต
           files: android/app/build/outputs/apk/debug/Pygmy-iQOO15.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

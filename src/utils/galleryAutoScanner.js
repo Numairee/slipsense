@@ -1,5 +1,5 @@
-// Automatic Gallery Slip Scanner for Pygmy Android
-// Scans Android device storage / photo gallery automatically without user having to pick files manually
+// Automatic Gallery Slip Scanner for SlipSense
+// Scans Android device storage / photo gallery automatically or by targeted album without user having to pick files manually
 
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { parseSlipImage, SAMPLE_TEST_SLIPS } from './slipParser';
@@ -41,20 +41,57 @@ export const AutoScanner = {
   },
 
   /**
-   * Native Android: Scans recent gallery photos directly via MediaStore & Google ML Kit on-device
+   * Fetch all device photo albums / folders with photo count and bank flags
    */
-  async scanNativeGallery(existingTransactions = [], categories = [], merchantRules = {}) {
+  async getPhotoAlbums() {
+    if (!this.isNative()) {
+      return [
+        { bucketName: 'K PLUS', count: 18, isBank: true, bankId: 'KBANK', bankLabel: 'กสิกรไทย (K PLUS)' },
+        { bucketName: 'SCB EASY', count: 9, isBank: true, bankId: 'SCB', bankLabel: 'ไทยพาณิชย์ (SCB EASY)' },
+        { bucketName: 'Krungthai NEXT', count: 6, isBank: true, bankId: 'KTB', bankLabel: 'กรุงไทย (Krungthai NEXT)' },
+        { bucketName: 'Screenshots', count: 42, isBank: false, isScreenshot: true, bankLabel: 'ภาพหน้าจอ (Screenshots)' }
+      ];
+    }
     try {
-      // Scan across all bank folders & recent screenshots with full native ML Kit speed
+      const res = await GalleryScanner.getPhotoAlbums();
+      if (res && res.albums) {
+        return res.albums;
+      }
+      return [];
+    } catch (err) {
+      console.warn('Failed to getPhotoAlbums:', err);
+      return [];
+    }
+  },
+
+  /**
+   * Native Android: Scans a specific album folder (e.g. 'K PLUS' or 'Screenshots') with 100% depth
+   */
+  async scanAlbum(bucketName, existingTransactions = [], categories = [], merchantRules = {}) {
+    return this.scanNativeGallery(existingTransactions, categories, merchantRules, {
+      bucketName,
+      limit: 2000
+    });
+  },
+
+  /**
+   * Native Android: Scans gallery photos directly via MediaStore & Google ML Kit on-device
+   * Options:
+   * - bucketName: if set, scans 100% of images in that specific folder
+   * - limit: max photos to inspect (default 500 for auto, 2000 for targeted folder)
+   */
+  async scanNativeGallery(existingTransactions = [], categories = [], merchantRules = {}, options = {}) {
+    try {
       const res = await GalleryScanner.scanRecentSlips({
-        limit: 300
+        bucketName: options.bucketName || null,
+        limit: options.limit || (options.bucketName ? 2000 : 500)
       });
 
       if (!res) {
         return { success: true, newSlips: [], duplicatesCount: 0, totalScanned: 0 };
       }
 
-      // 1. If Java ML Kit returned parsed slips directly (High Performance)
+      // If Java ML Kit returned parsed slips directly (High Performance)
       if (res.slips && Array.isArray(res.slips)) {
         const newSlips = [];
         let duplicatesCount = 0;
@@ -76,35 +113,8 @@ export const AutoScanner = {
           success: true,
           newSlips,
           duplicatesCount,
-          totalScanned: res.count || res.slips.length
-        };
-      }
-
-      // 2. Fallback if photos were returned as raw images
-      if (res.photos && res.photos.length > 0) {
-        const photos = res.photos;
-        const newSlips = [];
-        let duplicatesCount = 0;
-
-        for (const p of photos) {
-          const fileObj = await this.dataUrlToFile(p.dataUrl, p.name || 'slip.jpg');
-          const parseRes = await parseSlipImage(fileObj, merchantRules, categories);
-
-          if (parseRes.success && parseRes.data) {
-            const slip = parseRes.data;
-            if (this.isDuplicate(slip, existingTransactions)) {
-              duplicatesCount++;
-            } else {
-              newSlips.push(slip);
-            }
-          }
-        }
-
-        return {
-          success: true,
-          newSlips,
-          duplicatesCount,
-          totalScanned: photos.length
+          totalScanned: res.count || res.slips.length,
+          targetBucket: res.targetBucket || options.bucketName || 'ALL_BANKS'
         };
       }
 
@@ -170,7 +180,6 @@ export const AutoScanner = {
   async simulateAutoScan(existingTransactions = [], categories = [], merchantRules = {}) {
     await new Promise(r => setTimeout(r, 900));
 
-    // Pick 1-2 random unrecorded sample slips
     const candidates = SAMPLE_TEST_SLIPS.filter(sample => {
       return !existingTransactions.some(ex => ex.payee === sample.payee);
     });

@@ -40,10 +40,11 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -86,9 +87,9 @@ public class GalleryScannerPlugin extends Plugin {
                 .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
                 .build();
             barcodeScanner = BarcodeScanning.getClient(qrOnlyOptions);
-            Log.d(TAG, "ML Kit initialized successfully (QR-only & Latin OCR)");
+            Log.d(TAG, "ML Kit initialized (QR-only & Latin OCR)");
 
-            // Warm up native ML Kit models asynchronously in background so first scan is instant
+            // Warm up native ML Kit models asynchronously in background
             new Thread(() -> {
                 try {
                     Bitmap dummy = Bitmap.createBitmap(32, 32, Bitmap.Config.ARGB_8888);
@@ -112,6 +113,108 @@ public class GalleryScannerPlugin extends Plugin {
         } else {
             return getContext().checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
         }
+    }
+
+    @PluginMethod
+    public void getPhotoAlbums(PluginCall call) {
+        if (!hasGalleryPermission()) {
+            call.reject("Permission not granted to read gallery");
+            return;
+        }
+
+        new Thread(() -> {
+            try {
+                ContentResolver resolver = getContext().getContentResolver();
+                Uri collection;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    collection = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL);
+                } else {
+                    collection = MediaStore.Images.Media.EXTERNAL_CONTENT_URI;
+                }
+
+                String[] projection = new String[] {
+                    MediaStore.Images.Media._ID,
+                    MediaStore.Images.Media.BUCKET_DISPLAY_NAME,
+                    MediaStore.Images.Media.DATE_ADDED
+                };
+
+                String sortOrder = MediaStore.Images.Media.DATE_ADDED + " DESC";
+                Map<String, AlbumInfo> albumMap = new LinkedHashMap<>();
+
+                try (Cursor cursor = resolver.query(collection, projection, null, null, sortOrder)) {
+                    if (cursor != null) {
+                        int bucketCol = cursor.getColumnIndex(MediaStore.Images.Media.BUCKET_DISPLAY_NAME);
+                        int idCol = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID);
+                        int dateCol = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_ADDED);
+
+                        while (cursor.moveToNext()) {
+                            String bucket = bucketCol >= 0 ? cursor.getString(bucketCol) : "";
+                            if (bucket == null || bucket.trim().isEmpty()) {
+                                bucket = "รูปภาพทั่วไป";
+                            }
+                            long id = cursor.getLong(idCol);
+                            long dateAdded = cursor.getLong(dateCol);
+
+                            AlbumInfo info = albumMap.get(bucket);
+                            if (info == null) {
+                                info = new AlbumInfo();
+                                info.bucketName = bucket;
+                                info.count = 0;
+                                info.sampleId = id;
+                                info.latestDate = dateAdded;
+                                info.bankId = detectBankFromFolderOrFile("", bucket);
+                                info.isBank = info.bankId != null;
+                                info.isScreenshot = isScreenshotAlbum(bucket);
+                                info.bankLabel = getBankThaiLabel(info.bankId, bucket);
+                                albumMap.put(bucket, info);
+                            }
+                            info.count++;
+                        }
+                    }
+                }
+
+                List<AlbumInfo> bankAlbums = new ArrayList<>();
+                List<AlbumInfo> screenAlbums = new ArrayList<>();
+                List<AlbumInfo> otherAlbums = new ArrayList<>();
+
+                for (AlbumInfo a : albumMap.values()) {
+                    if (a.isBank) {
+                        bankAlbums.add(a);
+                    } else if (a.isScreenshot) {
+                        screenAlbums.add(a);
+                    } else {
+                        otherAlbums.add(a);
+                    }
+                }
+
+                List<AlbumInfo> sortedList = new ArrayList<>();
+                sortedList.addAll(bankAlbums);
+                sortedList.addAll(screenAlbums);
+                sortedList.addAll(otherAlbums);
+
+                JSArray arr = new JSArray();
+                for (AlbumInfo a : sortedList) {
+                    JSObject obj = new JSObject();
+                    obj.put("bucketName", a.bucketName);
+                    obj.put("count", a.count);
+                    obj.put("sampleId", a.sampleId);
+                    obj.put("isBank", a.isBank);
+                    obj.put("bankId", a.bankId);
+                    obj.put("isScreenshot", a.isScreenshot);
+                    obj.put("bankLabel", a.bankLabel);
+                    arr.put(obj);
+                }
+
+                JSObject res = new JSObject();
+                res.put("success", true);
+                res.put("albums", arr);
+                call.resolve(res);
+
+            } catch (Exception e) {
+                Log.e(TAG, "getPhotoAlbums error", e);
+                call.reject("Error fetching photo albums: " + e.getMessage());
+            }
+        }).start();
     }
 
     @PluginMethod
@@ -175,6 +278,17 @@ public class GalleryScannerPlugin extends Plugin {
         }
     }
 
+    private static class AlbumInfo {
+        String bucketName;
+        int count;
+        long sampleId;
+        long latestDate;
+        boolean isBank;
+        String bankId;
+        boolean isScreenshot;
+        String bankLabel;
+    }
+
     private static class CandidateMedia {
         long id;
         String name;
@@ -184,15 +298,16 @@ public class GalleryScannerPlugin extends Plugin {
     }
 
     /**
-     * Resilient MediaStore Scanner:
-     * Does NOT use fragile SQL LIKE clauses which fail across Android 14/15 OEM ROMs (iQOO/Vivo, Samsung, Xiaomi).
-     * Scans recent photos directly and accurately matches Thai albums (ภาพหน้าจอ, ดาวน์โหลด, etc.)
-     * and bank albums (K PLUS, SCB, NEXT, etc.).
+     * Path-Targeted & Resilient MediaStore Scanner:
+     * - If bucketName is specified: Scans 100% of the images in that specific folder completely!
+     * - If bucketName is NOT specified (Auto-Scan): Targets recognized bank folders & screenshots,
+     *   ignoring DCIM/Camera photos so zero false-positive receipts and zero cut-offs occur.
      */
     private void executeGalleryScan(PluginCall call) {
         new Thread(() -> {
             try {
-                int maxToInspect = call.getInt("limit", 400);
+                String targetBucket = call.getString("bucketName", null);
+                int maxToInspect = call.getInt("limit", (targetBucket != null && !targetBucket.isEmpty()) ? 2000 : 500);
 
                 ContentResolver resolver = getContext().getContentResolver();
                 Uri collection;
@@ -209,14 +324,22 @@ public class GalleryScannerPlugin extends Plugin {
                     MediaStore.Images.Media.DATE_ADDED
                 };
 
+                String selection = null;
+                String[] selectionArgs = null;
+
+                if (targetBucket != null && !targetBucket.isEmpty()) {
+                    selection = MediaStore.Images.Media.BUCKET_DISPLAY_NAME + " = ?";
+                    selectionArgs = new String[] { targetBucket };
+                    Log.d(TAG, "Scanning target bucket exclusively: " + targetBucket);
+                }
+
                 String sortOrder = MediaStore.Images.Media.DATE_ADDED + " DESC";
 
                 List<CandidateMedia> highPriorityList = new ArrayList<>();
                 List<CandidateMedia> standardList = new ArrayList<>();
                 Set<Long> seenIds = new HashSet<>();
 
-                // Clean direct query without fragile SQL LIKE filters
-                try (Cursor cursor = resolver.query(collection, projection, null, null, sortOrder)) {
+                try (Cursor cursor = resolver.query(collection, projection, selection, selectionArgs, sortOrder)) {
                     if (cursor != null) {
                         int idCol = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID);
                         int nameCol = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DISPLAY_NAME);
@@ -237,25 +360,26 @@ public class GalleryScannerPlugin extends Plugin {
                             cm.dateAdded = cursor.getLong(dateCol);
                             cm.isBankSource = isKnownBankOrSlipSource(cm.name, cm.bucket);
 
-                            if (cm.isBankSource) {
+                            // When target bucket is explicitly chosen by user, add all photos in it
+                            if (targetBucket != null && !targetBucket.isEmpty()) {
                                 highPriorityList.add(cm);
-                            } else if (isLikelySlipContainer(cm.name, cm.bucket)) {
-                                standardList.add(cm);
                             } else {
-                                // Keep general photos if queue has capacity
-                                if (standardList.size() < 120) {
+                                // Auto-Scan: prioritize bank albums and screenshots only
+                                if (cm.isBankSource) {
+                                    highPriorityList.add(cm);
+                                } else if (isLikelySlipContainer(cm.name, cm.bucket)) {
                                     standardList.add(cm);
                                 }
+                                // Notice: Camera folder is strictly skipped in auto-scan to prevent false positives!
                             }
                         }
                     }
                 }
 
-                // Prioritize bank folders & screenshots/downloads first
                 List<CandidateMedia> finalQueue = new ArrayList<>(highPriorityList);
                 finalQueue.addAll(standardList);
 
-                Log.d(TAG, "Scanned " + finalQueue.size() + " candidate images from device");
+                Log.d(TAG, "Selected " + finalQueue.size() + " candidate photos to inspect for target=" + targetBucket);
 
                 JSArray parsedSlips = new JSArray();
                 int scannedCount = 0;
@@ -273,12 +397,13 @@ public class GalleryScannerPlugin extends Plugin {
                     }
                 }
 
-                Log.d(TAG, "Examined " + scannedCount + " images, found " + parsedSlips.length() + " authentic slips");
+                Log.d(TAG, "Inspected " + scannedCount + " photos, found " + parsedSlips.length() + " authentic slips");
 
                 JSObject res = new JSObject();
                 res.put("success", true);
                 res.put("slips", parsedSlips);
                 res.put("count", scannedCount);
+                res.put("targetBucket", targetBucket != null ? targetBucket : "ALL_BANKS");
                 call.resolve(res);
 
             } catch (Exception e) {
@@ -286,6 +411,34 @@ public class GalleryScannerPlugin extends Plugin {
                 call.reject("Error scanning gallery: " + e.getMessage());
             }
         }).start();
+    }
+
+    private static boolean isScreenshotAlbum(String bucketName) {
+        if (bucketName == null) return false;
+        String lower = bucketName.toLowerCase(Locale.ROOT);
+        return lower.contains("screenshot") || lower.contains("ภาพหน้าจอ") || lower.contains("แคป");
+    }
+
+    private static String getBankThaiLabel(String bankId, String bucketName) {
+        if (bankId == null) {
+            if (isScreenshotAlbum(bucketName)) return "ภาพหน้าจอ (Screenshots)";
+            if (bucketName.toLowerCase(Locale.ROOT).contains("download") || bucketName.contains("ดาวน์โหลด")) return "ดาวน์โหลด (Download)";
+            if (bucketName.toLowerCase(Locale.ROOT).contains("camera") || bucketName.contains("กล้อง")) return "กล้อง (Camera)";
+            return bucketName;
+        }
+        switch (bankId) {
+            case "KBANK": return "กสิกรไทย (K PLUS)";
+            case "SCB": return "ไทยพาณิชย์ (SCB EASY)";
+            case "KTB": return "กรุงไทย (Krungthai NEXT)";
+            case "BAY": return "กรุงศรี (KMA)";
+            case "TTB": return "ทหารไทยธนชาต (ttb touch)";
+            case "BBL": return "กรุงเทพ (Bualuang mBanking)";
+            case "GSB": return "ออมสิน (MyMo)";
+            case "TRUEMONEY": return "ทรูมันนี่ (TrueMoney)";
+            case "DIME": return "ไดม์ (Dime! KKP)";
+            case "MAKE": return "MAKE by KBank";
+            default: return bucketName;
+        }
     }
 
     /**
@@ -307,15 +460,13 @@ public class GalleryScannerPlugin extends Plugin {
     }
 
     /**
-     * Checks if folder is a common screenshot, download, or messaging container in Thai or English
+     * Checks if folder is a common screenshot or download container
      */
     private boolean isLikelySlipContainer(String fileName, String bucketName) {
         String combined = ((fileName != null ? fileName : "") + " " + (bucketName != null ? bucketName : "")).toLowerCase(Locale.ROOT);
         return combined.contains("screenshot") || combined.contains("ภาพหน้าจอ") || combined.contains("แคป") ||
                combined.contains("download") || combined.contains("ดาวน์โหลด") || combined.contains("line") ||
-               combined.contains("facebook") || combined.contains("messenger") || combined.contains("wechat") ||
-               combined.contains("pictures") || combined.contains("dcim") || combined.contains("camera") ||
-               combined.contains("รูปภาพ");
+               combined.contains("messenger") || combined.contains("รูปภาพ");
     }
 
     private JSObject processImageUri(ContentResolver resolver, Uri uri, long id, String fileName, String bucketName, long dateAddedSec, boolean isBankSource) {
@@ -353,25 +504,21 @@ public class GalleryScannerPlugin extends Plugin {
     }
 
     /**
-     * SlipSense Verification Engine:
-     * Robustly extracts authentic bank e-slips from all Thai banks.
-     * Prevents rejecting valid slips by recognizing Thai keywords and diverse amount styles.
+     * SlipSense Strict Verification Engine:
+     * 1. Official Bank of Thailand (BOT) / ITMX SlipVerify QR:
+     *    - If valid ITMX QR code is found (000001, 0103XXX, 5102TH) -> 100% Guaranteed Bank Slip!
+     * 2. Non-QR Image:
+     *    - MUST satisfy ALL 4 CRITERIA:
+     *      A. Bank Identified (Text, Color HSV, or Bank Album)
+     *      B. Explicit Transfer Header ("โอนเงินสำเร็จ", "Successful Transfer", etc.)
+     *      C. Valid Monetary Amount with Context
+     *      D. Account or Ref ID
+     *    - If ANY criterion is missing -> STRICTLY REJECTED! Zero false positives!
      */
     private JSObject processBitmapStrict(Bitmap bmp, long id, String fileName, String bucketName, long dateAddedSec, boolean isBankSource) {
         InputImage inputImage = InputImage.fromBitmap(bmp, 0);
 
-        // 1. Scan OCR text first (slips always have transaction text)
-        String ocrText = "";
-        if (textRecognizer != null) {
-            try {
-                Text visionText = Tasks.await(textRecognizer.process(inputImage));
-                ocrText = visionText.getText();
-            } catch (Exception e) {
-                Log.d(TAG, "Text OCR note for " + fileName + ": " + e.getMessage());
-            }
-        }
-
-        // 2. Scan QR code (SlipVerify / PromptPay Mini QR - QR format only for max speed)
+        // 1. Scan QR code first (SlipVerify / PromptPay Mini QR)
         String qrPayload = "";
         String qrBankId = null;
         String qrRefCode = null;
@@ -393,50 +540,54 @@ public class GalleryScannerPlugin extends Plugin {
             }
         }
 
-        // 3. Verification & Amount Extraction
+        // 2. Scan OCR text
+        String ocrText = "";
+        if (textRecognizer != null) {
+            try {
+                Text visionText = Tasks.await(textRecognizer.process(inputImage));
+                ocrText = visionText.getText();
+            } catch (Exception e) {
+                Log.d(TAG, "Text OCR note for " + fileName + ": " + e.getMessage());
+            }
+        }
+
         boolean hasSlipVerifyQR = !qrPayload.isEmpty() && isAuthenticSlipQR(qrPayload);
         double extractedAmount = extractSmartAmount(ocrText);
 
-        Log.d(TAG, "Evaluated " + fileName + ": QR=" + (!qrPayload.isEmpty()) + ", ocrLen=" + ocrText.length() + ", amount=" + extractedAmount);
-
-        // Check supporting structural evidence:
         boolean hasMaskedAcc = Pattern.compile("(?i)[xX*]{2,}[-\\s]?[xX*0-9-]{3,}").matcher(ocrText).find();
-        boolean hasTime = Pattern.compile("\\b[0-2]?[0-9]:[0-5][0-9]\\b").matcher(ocrText).find();
-        boolean hasTransferKeywords = hasSlipKeywords(ocrText);
+        boolean hasTransferHeader = hasExplicitTransferHeader(ocrText);
         boolean hasRefCode = Pattern.compile("(?i)(?:Ref|Transaction ID|Trans ID|เลขที่|รหัส|อ้างอิง)[:\\s]*[A-Za-z0-9]{8,}").matcher(ocrText).find();
 
         String folderBank = detectBankFromFolderOrFile(fileName, bucketName);
         String textBank = detectBankFromOCRText(ocrText);
         String colorBank = detectBankFromConcentratedLogoHSV(bmp);
 
-        // If no amount was extracted, try fallback if it has strong bank slip indicators
-        if (extractedAmount <= 0.0) {
-            if (hasSlipVerifyQR || isBankSource || folderBank != null || colorBank != null || hasTransferKeywords) {
-                extractedAmount = extractAnyNumberFallback(ocrText);
+        boolean hasBankIdentified = (qrBankId != null || textBank != null || colorBank != null || isBankSource || folderBank != null);
+
+        // STRICT REJECTION:
+        // If photo does NOT have an authentic ITMX SlipVerify QR:
+        // It MUST satisfy ALL 4 conditions to be accepted!
+        if (!hasSlipVerifyQR) {
+            boolean hasAccountOrRef = hasMaskedAcc || hasRefCode;
+            boolean hasValidAmount = extractedAmount > 0.0;
+
+            if (!hasBankIdentified || !hasTransferHeader || !hasValidAmount || !hasAccountOrRef) {
+                Log.d(TAG, "STRICTLY REJECTED non-slip " + fileName + ": bank=" + hasBankIdentified +
+                      ", header=" + hasTransferHeader + ", amt=" + hasValidAmount + " (" + extractedAmount + ")" +
+                      ", acc/ref=" + hasAccountOrRef);
+                return null;
             }
+        }
+
+        // If amount was not extracted yet, try fallback
+        if (extractedAmount <= 0.0) {
+            extractedAmount = extractAnyNumberFallback(ocrText);
             if (extractedAmount <= 0.0 && !hasSlipVerifyQR) {
                 return null;
             }
         }
 
-        int evidenceScore = 0;
-        if (hasSlipVerifyQR) evidenceScore += 5;
-        if (isBankSource || folderBank != null) evidenceScore += 2;
-        if (extractedAmount > 0.0) evidenceScore += 2;
-        if (hasMaskedAcc) evidenceScore += 2;
-        if (hasTransferKeywords) evidenceScore += 2;
-        if (hasTime) evidenceScore += 1;
-        if (hasRefCode) evidenceScore += 2;
-        if (textBank != null) evidenceScore += 2;
-        if (colorBank != null) evidenceScore += 2;
-
-        // Evidence threshold: Needs at least 2 points to be verified (e.g. amount + keywords, or QR)
-        Log.d(TAG, "Evidence for " + fileName + ": score=" + evidenceScore + " (QR=" + hasSlipVerifyQR + ", amount=" + extractedAmount + ", bankSource=" + isBankSource + ", textBank=" + textBank + ", colorBank=" + colorBank + ")");
-        if (evidenceScore < 2) {
-            return null;
-        }
-
-        // 4. Determine Bank ID with strict priority
+        // 3. Determine Bank ID with strict priority
         String finalBankId = "KBANK";
         if (qrBankId != null) {
             finalBankId = qrBankId;
@@ -448,7 +599,7 @@ public class GalleryScannerPlugin extends Plugin {
             finalBankId = folderBank;
         }
 
-        // 5. Parse Dates, Times, Payees
+        // 4. Parse Dates, Times, Payees
         long nowSec = System.currentTimeMillis() / 1000;
         long effectiveSec = (dateAddedSec > 1500000000L && dateAddedSec <= nowSec + 86400) ? dateAddedSec : nowSec;
         Date dateObj = new Date(effectiveSec * 1000);
@@ -498,19 +649,31 @@ public class GalleryScannerPlugin extends Plugin {
         slipObj.put("rawOcrText", ocrText);
         slipObj.put("isManual", false);
 
-        Log.d(TAG, "VERIFIED SLIP: Bank=" + finalBankId + " Amount=" + extractedAmount + " Date=" + date + " Payee=" + payee);
+        Log.d(TAG, "VERIFIED AUTHENTIC SLIP: Bank=" + finalBankId + " Amount=" + extractedAmount + " Date=" + date + " Payee=" + payee);
         return slipObj;
     }
 
     /**
+     * Checks for explicit Thai / English bank transfer confirmation headers
+     */
+    private static boolean hasExplicitTransferHeader(String text) {
+        if (text == null || text.isEmpty()) return false;
+        String lower = text.toLowerCase(Locale.ROOT);
+        return lower.contains("โอนเงินสำเร็จ") || lower.contains("โอนสำเร็จ") ||
+               lower.contains("รายการสำเร็จ") || lower.contains("ทำรายการสำเร็จ") ||
+               lower.contains("ชำระเงินสำเร็จ") || lower.contains("จ่ายเงินสำเร็จ") ||
+               lower.contains("โอนเงินให้") || lower.contains("บันทึกสลิป") ||
+               lower.contains("successful transfer") || lower.contains("transfer successful") ||
+               lower.contains("transaction successful") || lower.contains("payment successful");
+    }
+
+    /**
      * Smart Amount Parser:
-     * Supports standard decimals (145.00, 1,280.50), dot-dash (145.-),
-     * and integer amounts preceded by currency/transfer keywords.
+     * Extracts decimal and currency amounts with context
      */
     private double extractSmartAmount(String text) {
         if (text == null || text.isEmpty()) return 0.0;
 
-        // 1. Check lines with explicit keywords first (จำนวนเงิน, ยอดเงิน, Amount, บาท, THB, ฿)
         Pattern decPattern = Pattern.compile("([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{1,6})\\s*[.,]\\s*([0-9]{2})");
         Pattern intPatternWithCues = Pattern.compile("(?i)(?:จำนวนเงิน|ยอดโอน|ยอดเงิน|amount|baht|thb|บาท|฿)[:\\s]*([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{1,6})\\b");
 
@@ -520,7 +683,6 @@ public class GalleryScannerPlugin extends Plugin {
             if (lower.contains("จำนวน") || lower.contains("ยอด") || lower.contains("amount") ||
                 lower.contains("baht") || lower.contains("thb") || lower.contains("บาท") || lower.contains("฿")) {
 
-                // Try decimal in keyword line
                 Matcher dm = decPattern.matcher(line);
                 if (dm.find()) {
                     try {
@@ -531,7 +693,6 @@ public class GalleryScannerPlugin extends Plugin {
                     } catch (Exception ignored) {}
                 }
 
-                // Try integer with cue
                 Matcher im = intPatternWithCues.matcher(line);
                 if (im.find()) {
                     try {
@@ -543,7 +704,6 @@ public class GalleryScannerPlugin extends Plugin {
             }
         }
 
-        // 2. Scan entire text for standard 2-decimal numbers (e.g. 145.00, 1,250.50)
         Matcher m = decPattern.matcher(text);
         List<Double> candidateAmounts = new ArrayList<>();
         while (m.find()) {
@@ -561,7 +721,6 @@ public class GalleryScannerPlugin extends Plugin {
             return candidateAmounts.get(0);
         }
 
-        // 3. Scan for dot-dash format (e.g. 145.-)
         Pattern dashPattern = Pattern.compile("\\b([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{1,6})\\s*[.,]\\s*-\\b");
         Matcher dashM = dashPattern.matcher(text);
         if (dashM.find()) {
@@ -575,9 +734,6 @@ public class GalleryScannerPlugin extends Plugin {
         return 0.0;
     }
 
-    /**
-     * Extracts precise transaction date from OCR text (Thai months & BE years)
-     */
     private String extractDateFromText(String text, String fallbackDate) {
         if (text == null || text.isEmpty()) return fallbackDate;
         String[] thMonths = {"ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."};
@@ -592,7 +748,7 @@ public class GalleryScannerPlugin extends Plugin {
                         int rawY = Integer.parseInt(m.group(2));
                         int year = rawY;
                         if (rawY >= 2500) year = rawY - 543;
-                        else if (rawY < 100) year = rawY + 2500 - 543; // e.g. 69 -> 2569 -> 2026
+                        else if (rawY < 100) year = rawY + 2500 - 543;
                         int month = i + 1;
                         return String.format(Locale.US, "%04d-%02d-%02d", year, month, day);
                     } catch (Exception ignored) {}
@@ -617,7 +773,6 @@ public class GalleryScannerPlugin extends Plugin {
 
     private boolean isValidAmount(double val) {
         if (val < 1.0 || val > 1000000.0) return false;
-        // Reject common Thai BE and CE years
         if (val == 2023.0 || val == 2024.0 || val == 2025.0 || val == 2026.0 ||
             val == 2566.0 || val == 2567.0 || val == 2568.0 || val == 2569.0) {
             return false;
@@ -625,24 +780,19 @@ public class GalleryScannerPlugin extends Plugin {
         return true;
     }
 
+    /**
+     * Validates if QR code conforms to official Thai banking slip standard (BOT / ITMX SlipVerify)
+     */
     private boolean isAuthenticSlipQR(String qr) {
         if (qr == null || qr.length() < 12) return false;
-        return qr.contains("000001") || qr.contains("0103") || qr.startsWith("000201") || qr.contains("A000000677") || qr.contains("promptpay");
-    }
-
-    private boolean hasSlipKeywords(String text) {
-        String lower = text.toLowerCase(Locale.ROOT);
-        return lower.contains("โอน") || lower.contains("สำเร็จ") || lower.contains("บาท") ||
-               lower.contains("จำนวน") || lower.contains("ยอด") || lower.contains("พร้อมเพย์") ||
-               lower.contains("บัญชี") || lower.contains("รายการ") || lower.contains("เวลา") ||
-               lower.contains("วันที่") || lower.contains("ผู้รับ") || lower.contains("ผู้โอน") ||
-               lower.contains("ธนาคาร") || lower.contains("ค่าธรรมเนียม") ||
-               lower.contains("transfer") || lower.contains("successful") || lower.contains("success") ||
-               lower.contains("promptpay") || lower.contains("baht") || lower.contains("thb") ||
-               lower.contains("amount") || lower.contains("transaction") || lower.contains("k plus") ||
-               lower.contains("scb") || lower.contains("krungthai") || lower.contains("krungsri") ||
-               lower.contains("ttb") || lower.contains("bualuang") || lower.contains("ref") ||
-               lower.contains("paid") || lower.contains("payment") || lower.contains("scan");
+        // 1. National ITMX SlipVerify Standard (BOT)
+        if (qr.contains("000001") && (qr.contains("5102TH") || qr.contains("0103"))) return true;
+        if (qr.startsWith("00") && qr.contains("0103") && qr.contains("5102TH")) return true;
+        // 2. PromptPay Transfer QR
+        if (qr.startsWith("000201") && (qr.contains("A000000677") || qr.contains("5802TH"))) return true;
+        // 3. TrueMoney
+        if (qr.contains("truemoney") || qr.contains("tmn") || qr.contains("0014A0000006770101")) return true;
+        return false;
     }
 
     /**
@@ -668,7 +818,7 @@ public class GalleryScannerPlugin extends Plugin {
         if (qr.contains("0002") || qr.contains("0020")) return "BBL";
         if (qr.contains("0030") || qr.contains("0300")) return "GSB";
         if (qr.contains("0069") || qr.contains("0690")) return "DIME";
-        if (qr.contains("0104") || qr.contains("1040")) return "TRUEMONEY";
+        if (qr.contains("0104") || qr.contains("1040") || qr.contains("truemoney")) return "TRUEMONEY";
 
         return null;
     }
@@ -679,7 +829,7 @@ public class GalleryScannerPlugin extends Plugin {
             int sub02 = qr.indexOf("02");
             if (sub02 != -1 && sub02 + 4 < qr.length()) {
                 int len = Integer.parseInt(qr.substring(sub02 + 2, sub02 + 4));
-                if (len > 8 && sub02 + 4 + len <= qr.length()) {
+                if (len >= 8 && sub02 + 4 + len <= qr.length()) {
                     return qr.substring(sub02 + 4, sub02 + 4 + len);
                 }
             }

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import SummaryCards from '../components/SummaryCards';
 import TransactionItem from '../components/TransactionItem';
-import { Camera, Plus, Sparkles, Receipt, Zap, Loader2, Calendar, RefreshCw, Trash2, ArrowUpRight, TrendingUp } from 'lucide-react';
+import { Camera, Plus, Sparkles, Receipt, Zap, Loader2, Calendar, RefreshCw, Trash2, ArrowUpRight, TrendingUp, Folder } from 'lucide-react';
 import { sound } from '../utils/sound';
 import { calculateFinancialHealth } from '../utils/analyticsEngine';
 
@@ -12,6 +12,7 @@ export default function HomeView({
   budgets = {},
   isAutoScanning,
   onTriggerAutoScan,
+  onOpenAlbumPicker,
   onClearAndRescan,
   onOpenResetModal,
   onOpenScanModal,
@@ -162,10 +163,10 @@ export default function HomeView({
             </div>
             <div className="text-left">
               <div className="leading-tight text-xs sm:text-sm font-black">
-                {isAutoScanning ? 'กำลังกวาดหารูปสลิปในเครื่อง...' : 'กวาดอ่านสลิปอัตโนมัติ ⚡'}
+                {isAutoScanning ? 'กำลังกวาดอ่านสลิปธนาคาร...' : 'กวาดอ่านสลิปอัตโนมัติ ⚡'}
               </div>
               <div className="text-[10px] text-emerald-100 font-medium">
-                ตรวจหาและอ่านสลิปธนาคารในอัลบั้มเครื่องทันที ไม่ต้องเลือกรูปเอง
+                ตรวจหาจากโฟลเดอร์ธนาคารทั้งหมด (K PLUS, SCB, NEXT, ภาพหน้าจอ)
               </div>
             </div>
           </div>
@@ -174,17 +175,28 @@ export default function HomeView({
           </span>
         </button>
 
-        {/* Secondary Options: Pick Slip Image, Manual Cash */}
-        <div className="grid grid-cols-2 gap-2">
+        {/* Secondary Action Row: Choose Folder, Pick Image, Cash */}
+        <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
+          <button
+            onClick={() => {
+              sound.playPop();
+              if (onOpenAlbumPicker) onOpenAlbumPicker();
+            }}
+            className="py-2.5 px-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 active:scale-98 border border-neutral-800 text-neutral-200 font-bold text-[11px] sm:text-xs shadow-md flex flex-col sm:flex-row items-center justify-center gap-1 transition-all"
+          >
+            <Folder className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span>เลือกโฟลเดอร์</span>
+          </button>
+
           <button
             onClick={() => {
               sound.playPop();
               onOpenScanModal();
             }}
-            className="py-2.5 px-3 rounded-xl bg-neutral-900 hover:bg-neutral-800 active:scale-98 border border-neutral-800 text-neutral-200 font-bold text-xs shadow-md flex items-center justify-center gap-1.5 transition-all"
+            className="py-2.5 px-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 active:scale-98 border border-neutral-800 text-neutral-200 font-bold text-[11px] sm:text-xs shadow-md flex flex-col sm:flex-row items-center justify-center gap-1 transition-all"
           >
-            <Camera className="w-3.5 h-3.5 text-cyan-400" />
-            <span>เลือกรูปสลิปเอง</span>
+            <Camera className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+            <span>เลือกรูปเอง</span>
           </button>
 
           <button
@@ -192,9 +204,9 @@ export default function HomeView({
               sound.playPop();
               onOpenManualModal();
             }}
-            className="py-2.5 px-3 rounded-xl bg-neutral-900 hover:bg-neutral-800 active:scale-98 border border-neutral-800 text-neutral-200 font-bold text-xs shadow-md flex items-center justify-center gap-1.5 transition-all"
+            className="py-2.5 px-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 active:scale-98 border border-neutral-800 text-neutral-200 font-bold text-[11px] sm:text-xs shadow-md flex flex-col sm:flex-row items-center justify-center gap-1 transition-all"
           >
-            <Plus className="w-3.5 h-3.5 text-emerald-400" />
+            <Plus className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
             <span>จดเงินสด</span>
           </button>
         </div>

@@ -37,3 +37,5 @@ android/local.properties
 *.njsproj
 *.sln
 *.sw?
+
+test_slips_output/

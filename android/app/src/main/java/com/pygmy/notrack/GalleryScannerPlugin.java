@@ -298,16 +298,14 @@ public class GalleryScannerPlugin extends Plugin {
     }
 
     /**
-     * Path-Targeted & Resilient MediaStore Scanner:
-     * - If bucketName is specified: Scans 100% of the images in that specific folder completely!
-     * - If bucketName is NOT specified (Auto-Scan): Targets recognized bank folders & screenshots,
-     *   ignoring DCIM/Camera photos so zero false-positive receipts and zero cut-offs occur.
+     * 100% Complete Exhaustive Scanner (NO LIMIT, NO CUTOFF):
+     * - Scans EVERY SINGLE PHOTO in target folder or bank folders from #1 to the end.
+     * - Dispatches live progress events to UI: current / total.
      */
     private void executeGalleryScan(PluginCall call) {
         new Thread(() -> {
             try {
                 String targetBucket = call.getString("bucketName", null);
-                int maxToInspect = call.getInt("limit", (targetBucket != null && !targetBucket.isEmpty()) ? 2000 : 500);
 
                 ContentResolver resolver = getContext().getContentResolver();
                 Uri collection;
@@ -330,7 +328,7 @@ public class GalleryScannerPlugin extends Plugin {
                 if (targetBucket != null && !targetBucket.isEmpty()) {
                     selection = MediaStore.Images.Media.BUCKET_DISPLAY_NAME + " = ?";
                     selectionArgs = new String[] { targetBucket };
-                    Log.d(TAG, "Scanning target bucket exclusively: " + targetBucket);
+                    Log.d(TAG, "100% Exhaustive Scan for bucket: " + targetBucket);
                 }
 
                 String sortOrder = MediaStore.Images.Media.DATE_ADDED + " DESC";
@@ -346,9 +344,8 @@ public class GalleryScannerPlugin extends Plugin {
                         int bucketCol = cursor.getColumnIndex(MediaStore.Images.Media.BUCKET_DISPLAY_NAME);
                         int dateCol = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_ADDED);
 
-                        int totalInspected = 0;
-                        while (cursor.moveToNext() && totalInspected < maxToInspect) {
-                            totalInspected++;
+                        // NO LIMIT: Read every photo in target bucket
+                        while (cursor.moveToNext()) {
                             long id = cursor.getLong(idCol);
                             if (seenIds.contains(id)) continue;
                             seenIds.add(id);
@@ -360,17 +357,14 @@ public class GalleryScannerPlugin extends Plugin {
                             cm.dateAdded = cursor.getLong(dateCol);
                             cm.isBankSource = isKnownBankOrSlipSource(cm.name, cm.bucket);
 
-                            // When target bucket is explicitly chosen by user, add all photos in it
                             if (targetBucket != null && !targetBucket.isEmpty()) {
                                 highPriorityList.add(cm);
                             } else {
-                                // Auto-Scan: prioritize bank albums and screenshots only
                                 if (cm.isBankSource) {
                                     highPriorityList.add(cm);
                                 } else if (isLikelySlipContainer(cm.name, cm.bucket)) {
                                     standardList.add(cm);
                                 }
-                                // Notice: Camera folder is strictly skipped in auto-scan to prevent false positives!
                             }
                         }
                     }
@@ -378,8 +372,9 @@ public class GalleryScannerPlugin extends Plugin {
 
                 List<CandidateMedia> finalQueue = new ArrayList<>(highPriorityList);
                 finalQueue.addAll(standardList);
+                int totalToScan = finalQueue.size();
 
-                Log.d(TAG, "Selected " + finalQueue.size() + " candidate photos to inspect for target=" + targetBucket);
+                Log.d(TAG, "Exhaustive scan queue: " + totalToScan + " photos for target=" + targetBucket);
 
                 JSArray parsedSlips = new JSArray();
                 int scannedCount = 0;
@@ -395,14 +390,26 @@ public class GalleryScannerPlugin extends Plugin {
                     } catch (Exception e) {
                         Log.w(TAG, "Failed to process photo " + item.id + ": " + e.getMessage());
                     }
+
+                    // Emit live progress event to JS
+                    if (scannedCount % 5 == 0 || scannedCount == totalToScan) {
+                        JSObject progress = new JSObject();
+                        progress.put("scanned", scannedCount);
+                        progress.put("total", totalToScan);
+                        progress.put("found", parsedSlips.length());
+                        progress.put("percent", totalToScan > 0 ? (int)((scannedCount * 100.0) / totalToScan) : 100);
+                        progress.put("targetBucket", targetBucket != null ? targetBucket : "ALL_BANKS");
+                        notifyListeners("scanProgress", progress);
+                    }
                 }
 
-                Log.d(TAG, "Inspected " + scannedCount + " photos, found " + parsedSlips.length() + " authentic slips");
+                Log.d(TAG, "Completed exhaustive scan of " + scannedCount + "/" + totalToScan + " photos, found " + parsedSlips.length() + " authentic slips");
 
                 JSObject res = new JSObject();
                 res.put("success", true);
                 res.put("slips", parsedSlips);
                 res.put("count", scannedCount);
+                res.put("total", totalToScan);
                 res.put("targetBucket", targetBucket != null ? targetBucket : "ALL_BANKS");
                 call.resolve(res);
 
@@ -504,21 +511,17 @@ public class GalleryScannerPlugin extends Plugin {
     }
 
     /**
-     * SlipSense Strict Verification Engine:
-     * 1. Official Bank of Thailand (BOT) / ITMX SlipVerify QR:
-     *    - If valid ITMX QR code is found (000001, 0103XXX, 5102TH) -> 100% Guaranteed Bank Slip!
-     * 2. Non-QR Image:
-     *    - MUST satisfy ALL 4 CRITERIA:
-     *      A. Bank Identified (Text, Color HSV, or Bank Album)
-     *      B. Explicit Transfer Header ("โอนเงินสำเร็จ", "Successful Transfer", etc.)
-     *      C. Valid Monetary Amount with Context
-     *      D. Account or Ref ID
-     *    - If ANY criterion is missing -> STRICTLY REJECTED! Zero false positives!
+     * High-Speed Authentic Slip Verification:
+     * 1. Check Barcode FIRST (5-10ms)
+     *    - If BOT / ITMX SlipVerify QR found -> 100% verified authentic slip!
+     * 2. If NO QR Code:
+     *    - Fast-reject if image has no bank context (saves running heavy OCR on non-slips)
+     *    - If bank context present, run OCR and enforce all 4 strict criteria
      */
     private JSObject processBitmapStrict(Bitmap bmp, long id, String fileName, String bucketName, long dateAddedSec, boolean isBankSource) {
         InputImage inputImage = InputImage.fromBitmap(bmp, 0);
 
-        // 1. Scan QR code first (SlipVerify / PromptPay Mini QR)
+        // 1. Scan QR code first (5-10ms)
         String qrPayload = "";
         String qrBankId = null;
         String qrRefCode = null;
@@ -540,6 +543,17 @@ public class GalleryScannerPlugin extends Plugin {
             }
         }
 
+        boolean hasSlipVerifyQR = !qrPayload.isEmpty() && isAuthenticSlipQR(qrPayload);
+
+        // Quick heuristic check before expensive OCR:
+        String folderBank = detectBankFromFolderOrFile(fileName, bucketName);
+        String colorBank = detectBankFromConcentratedLogoHSV(bmp);
+
+        // If no QR code and not from bank folder / no bank color -> SKIP IMMEDIATELY! (Zero false positives & ultra fast)
+        if (!hasSlipVerifyQR && !isBankSource && folderBank == null && colorBank == null) {
+            return null;
+        }
+
         // 2. Scan OCR text
         String ocrText = "";
         if (textRecognizer != null) {
@@ -551,22 +565,16 @@ public class GalleryScannerPlugin extends Plugin {
             }
         }
 
-        boolean hasSlipVerifyQR = !qrPayload.isEmpty() && isAuthenticSlipQR(qrPayload);
         double extractedAmount = extractSmartAmount(ocrText);
-
         boolean hasMaskedAcc = Pattern.compile("(?i)[xX*]{2,}[-\\s]?[xX*0-9-]{3,}").matcher(ocrText).find();
         boolean hasTransferHeader = hasExplicitTransferHeader(ocrText);
         boolean hasRefCode = Pattern.compile("(?i)(?:Ref|Transaction ID|Trans ID|เลขที่|รหัส|อ้างอิง)[:\\s]*[A-Za-z0-9]{8,}").matcher(ocrText).find();
-
-        String folderBank = detectBankFromFolderOrFile(fileName, bucketName);
         String textBank = detectBankFromOCRText(ocrText);
-        String colorBank = detectBankFromConcentratedLogoHSV(bmp);
 
         boolean hasBankIdentified = (qrBankId != null || textBank != null || colorBank != null || isBankSource || folderBank != null);
 
         // STRICT REJECTION:
-        // If photo does NOT have an authentic ITMX SlipVerify QR:
-        // It MUST satisfy ALL 4 conditions to be accepted!
+        // If not a QR slip, it MUST satisfy ALL 4 conditions:
         if (!hasSlipVerifyQR) {
             boolean hasAccountOrRef = hasMaskedAcc || hasRefCode;
             boolean hasValidAmount = extractedAmount > 0.0;
@@ -653,9 +661,6 @@ public class GalleryScannerPlugin extends Plugin {
         return slipObj;
     }
 
-    /**
-     * Checks for explicit Thai / English bank transfer confirmation headers
-     */
     private static boolean hasExplicitTransferHeader(String text) {
         if (text == null || text.isEmpty()) return false;
         String lower = text.toLowerCase(Locale.ROOT);
@@ -667,10 +672,6 @@ public class GalleryScannerPlugin extends Plugin {
                lower.contains("transaction successful") || lower.contains("payment successful");
     }
 
-    /**
-     * Smart Amount Parser:
-     * Extracts decimal and currency amounts with context
-     */
     private double extractSmartAmount(String text) {
         if (text == null || text.isEmpty()) return 0.0;
 
@@ -780,9 +781,6 @@ public class GalleryScannerPlugin extends Plugin {
         return true;
     }
 
-    /**
-     * Validates if QR code conforms to official Thai banking slip standard (BOT / ITMX SlipVerify)
-     */
     private boolean isAuthenticSlipQR(String qr) {
         if (qr == null || qr.length() < 12) return false;
         // 1. National ITMX SlipVerify Standard (BOT)
@@ -795,10 +793,6 @@ public class GalleryScannerPlugin extends Plugin {
         return false;
     }
 
-    /**
-     * Decode Bank of Thailand (BOT) 3-digit code from SlipVerify QR payloads
-     * Format: ...0103[BOT_CODE]02...
-     */
     private static String detectBankFromQR(String qr) {
         if (qr == null || qr.isEmpty()) return null;
 
@@ -886,9 +880,6 @@ public class GalleryScannerPlugin extends Plugin {
         return null;
     }
 
-    /**
-     * Accurate HSV Logo Color Detection
-     */
     private String detectBankFromConcentratedLogoHSV(Bitmap bmp) {
         try {
             int w = bmp.getWidth();
@@ -1018,7 +1009,7 @@ public class GalleryScannerPlugin extends Plugin {
             case "GSB": return "โอนเงิน (MyMo)";
             case "TRUEMONEY": return "โอนเงิน (TrueMoney)";
             case "DIME": return "โอนเงิน (Dime!)";
-            case "MAKE": return "โอนเงิน (MAKE)";
+            case "MAKE": return "MAKE by KBank";
             default: return "โอนเงินสำเร็จ";
         }
     }

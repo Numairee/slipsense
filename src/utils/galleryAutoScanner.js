@@ -21,6 +21,20 @@ export const AutoScanner = {
   },
 
   /**
+   * Listen to real-time scanning progress events from native plugin
+   */
+  async addProgressListener(callback) {
+    if (this.isNative() && GalleryScanner.addListener) {
+      try {
+        return await GalleryScanner.addListener('scanProgress', callback);
+      } catch (err) {
+        console.warn('Failed to add scanProgress listener:', err);
+      }
+    }
+    return { remove: () => {} };
+  },
+
+  /**
    * Check if a parsed slip is already recorded in transactions
    */
   isDuplicate(newTx, existingTransactions = []) {

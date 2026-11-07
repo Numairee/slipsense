@@ -22,7 +22,7 @@ export default function AutoScanToast({ notification, onClose }) {
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0 self-start">
           {notification.actionLabel && notification.onAction && (
             <button
               onClick={() => {
@@ -43,6 +43,26 @@ export default function AutoScanToast({ notification, onClose }) {
           </button>
         </div>
       </div>
+
+      {/* Real-time Progress Bar */}
+      {notification.progress && notification.progress.total > 0 && (
+        <div className="mt-1.5 p-2.5 bg-neutral-900/95 backdrop-blur-md rounded-xl border border-cyan-500/20 shadow-lg space-y-1.5 animate-fade-in">
+          <div className="flex items-center justify-between text-[11px] font-mono">
+            <span className="text-cyan-300 font-bold">
+              🔍 กำลังสแกน {notification.progress.scanned} / {notification.progress.total} รูป ({notification.progress.percent}%)
+            </span>
+            <span className="text-emerald-400 font-black">
+              พบสลิป {notification.progress.found} ใบ
+            </span>
+          </div>
+          <div className="w-full h-2 bg-neutral-800 rounded-full overflow-hidden p-0.5 border border-neutral-700/40">
+            <div
+              className="h-full bg-gradient-to-r from-cyan-400 via-teal-400 to-emerald-400 rounded-full transition-all duration-150"
+              style={{ width: `${Math.min(100, Math.max(2, notification.progress.percent))}%` }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

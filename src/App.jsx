@@ -71,46 +71,74 @@ export default function App() {
     }
 
     setIsAutoScanning(true);
-    const res = await AutoScanner.scanNativeGallery(transactions, categories, merchantRules);
-    setIsAutoScanning(false);
+    let progressListener = null;
 
-    if (res && res.success && res.newSlips && res.newSlips.length > 0) {
-      syncMonthToLatestSlip(res.newSlips);
-      const updated = Storage.addBatchTransactions(res.newSlips);
-      setTransactions(updated);
+    if (!isSilentOnStartup) {
+      setScanToast({
+        title: 'กำลังสแกนโฟลเดอร์ธนาคาร ⚡',
+        message: 'กำลังตรวจหาโฟลเดอร์และอ่านสลิปทุกใบ...'
+      });
+    }
 
-      sound.playCrunch();
-      setTimeout(() => {
-        confetti({
-          particleCount: 50,
-          spread: 80,
-          origin: { y: 0.25 }
+    try {
+      progressListener = await AutoScanner.addProgressListener((data) => {
+        if (!isSilentOnStartup) {
+          setScanToast({
+            title: 'กำลังกวาดอ่านสลิปธนาคาร ⚡',
+            message: `ตรวจแล้ว ${data.scanned} จาก ${data.total} รูป...`,
+            progress: data
+          });
+        }
+      });
+
+      const res = await AutoScanner.scanNativeGallery(transactions, categories, merchantRules);
+      setIsAutoScanning(false);
+
+      if (res && res.success && res.newSlips && res.newSlips.length > 0) {
+        syncMonthToLatestSlip(res.newSlips);
+        const updated = Storage.addBatchTransactions(res.newSlips);
+        setTransactions(updated);
+
+        sound.playCrunch();
+        setTimeout(() => {
+          confetti({
+            particleCount: 50,
+            spread: 80,
+            origin: { y: 0.25 }
+          });
+        }, 250);
+
+        setScanToast({
+          title: `พบสลิปใหม่ ${res.newSlips.length} ใบ! ⚡`,
+          message: `บันทึกยอดเงินเข้าภาพรวมเรียบร้อยแล้ว (ข้ามสลิปซ้ำ ${res.duplicatesCount || 0} ใบ)`
         });
-      }, 250);
 
-      setScanToast({
-        title: `พบสลิปใหม่ ${res.newSlips.length} ใบ! ⚡`,
-        message: `บันทึกยอดเงินเข้าภาพรวมเรียบร้อยแล้ว (ข้ามสลิปซ้ำ ${res.duplicatesCount || 0} ใบ)`
-      });
-
-      setTimeout(() => setScanToast(null), 5000);
-    } else if (res && res.success === false && !isSilentOnStartup) {
-      setScanToast({
-        title: 'ต้องการสิทธิ์เข้าถึงอัลบั้มรูปภาพ',
-        message: 'กรุณาอนุญาตสิทธิ์รูปภาพ หรือกดปุ่มด้านขวาเพื่อเลือกรูปสลิปเอง',
-        actionLabel: 'เลือกรูปเอง',
-        onAction: () => setIsScanOpen(true)
-      });
-      setTimeout(() => setScanToast(null), 6000);
-    } else if (!isSilentOnStartup) {
-      const dupMsg = res?.duplicatesCount > 0 ? ` (พบสลิปที่เคยบันทึกแล้ว ${res.duplicatesCount} ใบ)` : '';
-      setScanToast({
-        title: `ตรวจอัลบั้มแล้ว (${res?.totalScanned || 0} รูป)${dupMsg}`,
-        message: 'ไม่พบสลิปใหม่เพิ่มเติม หากสลิปอยู่ในโฟลเดอร์อื่น สามารถกดเลือกรูปสลิปได้เลย',
-        actionLabel: 'เลือกรูปสลิป',
-        onAction: () => setIsScanOpen(true)
-      });
-      setTimeout(() => setScanToast(null), 5500);
+        setTimeout(() => setScanToast(null), 5000);
+      } else if (res && res.success === false && !isSilentOnStartup) {
+        setScanToast({
+          title: 'ต้องการสิทธิ์เข้าถึงอัลบั้มรูปภาพ',
+          message: 'กรุณาอนุญาตสิทธิ์รูปภาพ หรือกดปุ่มด้านขวาเพื่อเลือกรูปสลิปเอง',
+          actionLabel: 'เลือกรูปเอง',
+          onAction: () => setIsScanOpen(true)
+        });
+        setTimeout(() => setScanToast(null), 6000);
+      } else if (!isSilentOnStartup) {
+        const dupMsg = res?.duplicatesCount > 0 ? ` (พบสลิปที่เคยบันทึกแล้ว ${res.duplicatesCount} ใบ)` : '';
+        setScanToast({
+          title: `ตรวจครบ ${res?.totalScanned || 0} รูปแล้ว${dupMsg}`,
+          message: 'ไม่พบสลิปใหม่เพิ่มเติม หากสลิปอยู่ในโฟลเดอร์อื่น สามารถกด "เลือกโฟลเดอร์" ได้เลย',
+          actionLabel: 'เลือกโฟลเดอร์',
+          onAction: () => setIsAlbumPickerOpen(true)
+        });
+        setTimeout(() => setScanToast(null), 5500);
+      }
+    } catch (e) {
+      console.warn('handleTriggerAutoScan error:', e);
+      setIsAutoScanning(false);
+    } finally {
+      if (progressListener && typeof progressListener.remove === 'function') {
+        progressListener.remove();
+      }
     }
   };
 
@@ -122,40 +150,59 @@ export default function App() {
     }
 
     setIsAutoScanning(true);
+    let progressListener = null;
+
     setScanToast({
       title: `กำลังสแกนโฟลเดอร์ "${bucketName}" ⚡`,
-      message: 'กำลังตรวจสอบทุกรูปภาพในโฟลเดอร์นี้อย่างละเอียด...'
+      message: 'กำลังเริ่มต้นตรวจสอบทุกรูปภาพ...'
     });
 
-    const res = await AutoScanner.scanAlbum(bucketName, transactions, categories, merchantRules);
-    setIsAutoScanning(false);
-
-    if (res && res.success && res.newSlips && res.newSlips.length > 0) {
-      syncMonthToLatestSlip(res.newSlips);
-      const updated = Storage.addBatchTransactions(res.newSlips);
-      setTransactions(updated);
-
-      sound.playCrunch();
-      setTimeout(() => {
-        confetti({
-          particleCount: 50,
-          spread: 80,
-          origin: { y: 0.25 }
+    try {
+      progressListener = await AutoScanner.addProgressListener((data) => {
+        setScanToast({
+          title: `กำลังสแกน "${bucketName}" ⚡`,
+          message: `กำลังตรวจรูปที่ ${data.scanned} จาก ${data.total} รูป...`,
+          progress: data
         });
-      }, 250);
+      });
 
-      setScanToast({
-        title: `พบสลิปใหม่ ${res.newSlips.length} ใบ ใน "${bucketName}"! 🎉`,
-        message: `บันทึกเข้าสู่ระบบเรียบร้อยแล้ว (ข้ามสลิปซ้ำ ${res.duplicatesCount || 0} ใบ)`
-      });
-      setTimeout(() => setScanToast(null), 5000);
-    } else {
-      const dupMsg = res?.duplicatesCount > 0 ? ` (พบสลิปที่เคยบันทึกแล้ว ${res.duplicatesCount} ใบ)` : '';
-      setScanToast({
-        title: `ตรวจครบ ${res?.totalScanned || 0} รูปใน "${bucketName}" แล้ว${dupMsg}`,
-        message: 'ไม่พบสลิปใหม่เพิ่มเติม'
-      });
-      setTimeout(() => setScanToast(null), 4500);
+      const res = await AutoScanner.scanAlbum(bucketName, transactions, categories, merchantRules);
+      setIsAutoScanning(false);
+
+      if (res && res.success && res.newSlips && res.newSlips.length > 0) {
+        syncMonthToLatestSlip(res.newSlips);
+        const updated = Storage.addBatchTransactions(res.newSlips);
+        setTransactions(updated);
+
+        sound.playCrunch();
+        setTimeout(() => {
+          confetti({
+            particleCount: 50,
+            spread: 80,
+            origin: { y: 0.25 }
+          });
+        }, 250);
+
+        setScanToast({
+          title: `พบสลิปใหม่ ${res.newSlips.length} ใบ ใน "${bucketName}"! 🎉`,
+          message: `บันทึกเข้าสู่ระบบเรียบร้อยแล้ว (ข้ามสลิปซ้ำ ${res.duplicatesCount || 0} ใบ)`
+        });
+        setTimeout(() => setScanToast(null), 5000);
+      } else {
+        const dupMsg = res?.duplicatesCount > 0 ? ` (พบสลิปที่เคยบันทึกแล้ว ${res.duplicatesCount} ใบ)` : '';
+        setScanToast({
+          title: `ตรวจครบ ${res?.totalScanned || 0} รูปใน "${bucketName}" แล้ว${dupMsg}`,
+          message: 'ไม่พบสลิปใหม่เพิ่มเติม'
+        });
+        setTimeout(() => setScanToast(null), 4500);
+      }
+    } catch (e) {
+      console.warn('handleScanSpecificAlbum error:', e);
+      setIsAutoScanning(false);
+    } finally {
+      if (progressListener && typeof progressListener.remove === 'function') {
+        progressListener.remove();
+      }
     }
   };
 

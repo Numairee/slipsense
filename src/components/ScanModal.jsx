@@ -362,7 +362,7 @@ export default function ScanModal({
                           <X className="w-3.5 h-3.5" />
                         </button>
                       </div>
-                      <details className="w-full text-xs border-t border-neutral-700 pt-2">
+                      <details open={!canImportSlip(item)} className="w-full text-xs border-t border-neutral-700 pt-2">
                         <summary className="cursor-pointer text-cyan-300">{canImportSlip(item) ? 'ตรวจสอบ / แก้ไขข้อมูล' : '⚠ กรุณากรอกข้อมูลที่อ่านไม่ครบ'}</summary>
                         {item.slipThumbnail && <img src={item.slipThumbnail} alt="สลิปต้นฉบับ" className="max-h-64 mx-auto my-2 rounded-lg" />}
                         {item.reviewWarnings?.length > 0 && <p className="text-amber-300 my-2">{item.reviewWarnings.join(' • ')}</p>}
@@ -373,8 +373,9 @@ export default function ScanModal({
                             </label>
                           ))}
                           <label>ธนาคาร
-                            <select aria-label="ธนาคาร" value={item.bankId} onChange={e => handleUpdateField(idx, 'bankId', e.target.value)} className="w-full bg-neutral-900 border border-neutral-600 rounded-lg p-2 mt-1">
-                              {BANK_LIST.map(bank => <option key={bank.id} value={bank.id}>{bank.name}</option>)}
+                            <select aria-label="ธนาคาร" value={item.bankId || ''} onChange={e => handleUpdateField(idx, 'bankId', e.target.value)} className="w-full bg-neutral-900 border border-neutral-600 rounded-lg p-2 mt-1">
+                              <option value="">เลือกธนาคารจากสลิป</option>
+                              {BANK_LIST.filter(bank => !['OTHER', 'CASH'].includes(bank.id)).map(bank => <option key={bank.id} value={bank.id}>{bank.name}</option>)}
                             </select>
                           </label>
                         </div>

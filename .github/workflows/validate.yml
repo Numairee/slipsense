@@ -19,7 +19,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: Native amount regression checks
+      - name: Native amount, date and QR regression checks
         run: |
-          javac -d /tmp/slip-tests android/app/src/main/java/com/pygmy/notrack/SlipAmountParser.java android/app/src/main/java/com/pygmy/notrack/SlipQrParser.java tests/SlipAmountParserTest.java
+          javac -d /tmp/slip-tests android/app/src/main/java/com/pygmy/notrack/SlipDateParser.java android/app/src/main/java/com/pygmy/notrack/SlipAmountParser.java android/app/src/main/java/com/pygmy/notrack/SlipQrParser.java tests/SlipAmountParserTest.java
           java -cp /tmp/slip-tests SlipAmountParserTest

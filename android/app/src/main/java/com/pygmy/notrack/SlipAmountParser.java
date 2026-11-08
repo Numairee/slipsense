@@ -24,7 +24,7 @@ public final class SlipAmountParser {
         double best = 0;
         boolean ambiguous = false;
         for (int i = 0; i < lines.length; i++) {
-            String line = lines[i].trim();
+            String line = lines[i].trim().replaceAll("(?i)([0-9])\\s*\\.\\s*-(?=\\s*(?:บาท|THB|baht|฿)?\\s*$)", "$1.00");
             if (EXCLUDED.matcher(line).find() || (i > 0 && EXCLUDED.matcher(lines[i - 1]).find() && !Pattern.compile("[0-9]").matcher(lines[i - 1]).find())) continue;
             boolean labelled = LABEL.matcher(line).find();
             boolean previous = i > 0 && LABEL.matcher(lines[i - 1]).find() && !EXCLUDED.matcher(lines[i - 1]).find();

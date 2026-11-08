@@ -531,7 +531,7 @@ public class GalleryScannerPlugin extends Plugin {
                 List<Barcode> barcodes = Tasks.await(barcodeScanner.process(inputImage));
                 for (Barcode b : barcodes) {
                     String raw = b.getRawValue();
-                    if (raw != null && !raw.isEmpty()) {
+                    if (raw != null && isAuthenticSlipQR(raw)) {
                         qrPayload = raw;
                         qrBankId = detectBankFromQR(raw);
                         qrRefCode = extractRefFromQR(raw);
@@ -604,13 +604,13 @@ public class GalleryScannerPlugin extends Plugin {
         SimpleDateFormat ymdFormat = new SimpleDateFormat("yyyy-MM-dd", Locale.US);
         SimpleDateFormat hmFormat = new SimpleDateFormat("HH:mm", Locale.US);
 
-        String date = ymdFormat.format(dateObj);
-        String time = hmFormat.format(dateObj);
+        String date = "";
+        String time = "";
 
         // Extract precise transaction date from OCR text if present
         date = extractDateFromText(ocrText, date);
 
-        Matcher tm = Pattern.compile("\\b([0-2]?[0-9]:[0-5][0-9])\\b").matcher(ocrText);
+        Matcher tm = Pattern.compile("\\b((?:[01]?[0-9]|2[0-3]):[0-5][0-9])\\b").matcher(ocrText);
         if (tm.find()) {
             String rawT = tm.group(1);
             time = rawT.length() == 4 ? "0" + rawT : rawT;
@@ -667,29 +667,9 @@ public class GalleryScannerPlugin extends Plugin {
     }
 
     private String extractDateFromText(String text, String fallbackDate) {
-        if (text == null || text.isEmpty()) return fallbackDate;
-        String[] thMonths = {"ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."};
-        for (int i = 0; i < thMonths.length; i++) {
-            String mStr = thMonths[i];
-            if (text.contains(mStr)) {
-                Pattern p = Pattern.compile("([0-3]?[0-9])\\s*" + Pattern.quote(mStr) + "\\s*([0-9]{2,4})");
-                Matcher m = p.matcher(text);
-                if (m.find()) {
-                    try {
-                        int day = Integer.parseInt(m.group(1));
-                        int rawY = Integer.parseInt(m.group(2));
-                        int year = rawY;
-                        if (rawY >= 2500) year = rawY - 543;
-                        else if (rawY < 100) year = rawY + 2500 - 543;
-                        int month = i + 1;
-                        return String.format(Locale.US, "%04d-%02d-%02d", year, month, day);
-                    } catch (Exception ignored) {}
-                }
-            }
-        }
-        return fallbackDate;
+        String date = SlipDateParser.parse(text);
+        return date.isEmpty() ? fallbackDate : date;
     }
-
 
     private boolean isAuthenticSlipQR(String qr) {
         return SlipQrParser.parse(qr) != null;
@@ -838,7 +818,7 @@ public class GalleryScannerPlugin extends Plugin {
             if (trimmed.contains(":")) continue;
             if (trimmed.matches("(?i).*[xX*]{2,}[-\\s]?[xX*0-9-]{3,}.*")) continue;
             if (trimmed.matches(".*[0-9]+\\.[0-9]{2}.*")) continue;
-            if (trimmed.matches(".*[0-2]?[0-9]:[0-5][0-9].*")) continue;
+            if (trimmed.matches(".*(?:[01]?[0-9]|2[0-3]):[0-5][0-9].*")) continue;
             if (trimmed.matches(".*\\b[A-Za-z0-9]{10,}\\b.*")) continue;
 
             StringBuilder cleanBrand = new StringBuilder();

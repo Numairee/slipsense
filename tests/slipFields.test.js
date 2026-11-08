@@ -40,7 +40,7 @@ test('bank scoped references and conservative fallback duplicates', () => {
   assert.equal(isDuplicateSlip({ ...a, ref: '' }, [{ ...a, ref: '', payee: ' cafe ' }]), true);
 });
 test('incomplete data cannot be imported', () => {
-  const item = { amount: 20, date: '2026-11-08', time: '12:00', payee: 'Cafe' };
+  const item = { bankId: 'KBANK', amount: 20, date: '2026-11-08', time: '12:00', payee: 'Cafe' };
   assert.equal(canImportSlip(item), true);
   for (const field of ['amount', 'date', 'time', 'payee']) assert.equal(canImportSlip({ ...item, [field]: '' }), false);
   assert.equal(canImportSlip({ ...item, amount: Infinity }), false);
@@ -60,4 +60,14 @@ test('English month and standalone recipient label', () => {
   assert.equal(fields.date, '2026-11-08');
   assert.equal(fields.payee, 'ร้านกาแฟ');
   assert.equal(parse('Fee\n10.00').amount, null);
+});
+
+test('bank must be identified before importing a transfer', () => {
+  const item = { amount: 20, date: '2026-11-08', time: '12:00', payee: 'Cafe' };
+  for (const bankId of ['', 'OTHER', 'CASH', 'missing']) assert.equal(canImportSlip({ ...item, bankId }), false);
+  assert.equal(canImportSlip({ ...item, bankId: 'GSB' }), true);
+});
+test('whole-baht shorthand and fullwidth digits', () => {
+  assert.equal(parse('จำนวนเงิน 125.- บาท').amount, 125);
+  assert.equal(parse('Amount １２５.５０ THB').amount, 125.5);
 });

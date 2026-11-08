@@ -1,3 +1,5 @@
+import { THAI_BANKS } from '../data/banks.js';
+
 /**
  * Tesseract often emits Thai with a space between every glyph ("เล ข ท ี ร า ย ก า ร").
  * Collapse whitespace between Thai characters (and around dots inside Thai abbreviations
@@ -5,7 +7,7 @@
  */
 export function normalizeThaiOcr(text = '') {
   const TH = '\u0E00-\u0E7F';
-  let t = text.replace(/\r/g, '');
+  let t = String(text).normalize('NFC').replace(/[０-９]/g, ch => String(ch.charCodeAt(0) - 0xFF10)).replace(/\r/g, '');
   let prev;
   do {
     prev = t;
@@ -43,7 +45,7 @@ export function parseTextToSlipFields(rawText = '') {
   const excluded = /ค่าธรรมเนียม|fee|ยอดคงเหลือ|balance|เลขที่|อ้างอิง|reference|transaction\s*id|บัญชี|account/i;
   const candidates = [];
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+    const line = lines[i].replace(/(\d)\s*\.\s*-(?=\s*(?:บาท|THB|baht|฿)?\s*$)/i, '$1.00');
     if (excluded.test(line) || (i > 0 && excluded.test(lines[i - 1]) && !/\d/.test(lines[i - 1]))) continue;
     const labelled = amountLabel.test(line);
     const previousLabel = i > 0 && amountLabel.test(lines[i - 1]) && !excluded.test(lines[i - 1]);
@@ -87,7 +89,7 @@ export function parseTextToSlipFields(rawText = '') {
 
   // 3. Extract Date
   let date = null;
-  const dateSlashRe = /\b(\d{1,2})[/\-](\d{1,2})[/\-](\d{2,4})\b/;
+  const dateSlashRe = /\b(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})\b/;
 
   for (const line of lines) {
     let found = false;
@@ -213,7 +215,7 @@ export function isDuplicateSlip(item, existing = []) {
 
 export function canImportSlip(item) {
   return Number.isFinite(Number(item.amount)) && Number(item.amount) > 0 &&
-    Number(item.amount) <= 1000000 && isValidSlipDate(item.date) &&
+    Number(item.amount) <= 1000000 && !!THAI_BANKS[item.bankId] && !['OTHER', 'CASH'].includes(item.bankId) && isValidSlipDate(item.date) &&
     /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(item.time || '') && !!item.payee?.trim();
 }
 

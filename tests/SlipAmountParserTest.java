@@ -1,5 +1,6 @@
 import com.pygmy.notrack.SlipAmountParser;
 import com.pygmy.notrack.SlipQrParser;
+import com.pygmy.notrack.SlipDateParser;
 
 public class SlipAmountParserTest {
     private static void check(String text, double expected) {
@@ -16,6 +17,15 @@ public class SlipAmountParserTest {
         check("Account 1234567890\nค่าธรรมเนียม 10.00", 0);
         check("Amount 100.00\nAmount 200.00", 0);
         check("Amount 2026.00", 2026);
+        check("จำนวนเงิน 125.- บาท", 125);
+        for (String[] pair : new String[][] {
+            {"8 Nov 2026", "2026-11-08"}, {"08/11/2569", "2026-11-08"},
+            {"2026-11-08", "2026-11-08"}, {"8 พ.ย. 2569", "2026-11-08"},
+            {"๘ พ.ย. ๒๕๖๙", "2026-11-08"}, {"29/02/2567", "2024-02-29"},
+            {"31/02/2569", ""}, {"29/02/2569", ""}, {"not a date", ""}
+        }) {
+            if (!SlipDateParser.parse(pair[0]).equals(pair[1])) throw new AssertionError("Date: " + pair[0]);
+        }
         String reference = "ABC010300612345";
         String validQr = "010300402" + String.format("%02d", reference.length()) + reference;
         if (SlipQrParser.parse(validQr) == null || !SlipQrParser.parse(validQr)[1].equals("ABC010300612345")) throw new AssertionError("Mini-QR");

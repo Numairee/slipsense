@@ -1,10 +1,11 @@
 {
   "name": "slipsense",
   "private": true,
-  "version": "2.1.1",
+  "version": "2.1.2",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "test": "node --test tests/*.test.js",
     "start": "vite --host",
     "build": "vite build",
     "android:sync": "npm run build && npx cap sync android",

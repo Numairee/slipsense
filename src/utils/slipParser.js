@@ -3,30 +3,19 @@
 
 import jsQR from 'jsqr';
 import { registerPlugin } from '@capacitor/core';
-import { THAI_BANKS, BANK_LIST, detectBankFromText } from '../data/banks';
 import { matchCategory } from '../data/defaultCategories';
-import { runSlipOCR } from './ocrEngine';
+import { parseTextToSlipFields } from './slipFields.js';
 
 const GalleryScanner = registerPlugin('GalleryScanner');
 
-// BOT Bank code mapping to bank ID
-const BOT_BANK_CODES = {
-  '004': 'KBANK',
-  '014': 'SCB',
-  '006': 'KTB',
-  '025': 'BAY',
-  '002': 'BBL',
-  '011': 'TTB',
-  '069': 'DIME',
-  '104': 'TRUEMONEY',
-  '030': 'GSB'
-};
+export { parseSlipVerifyQR } from './slipFields.js';
+import { parseSlipVerifyQR } from './slipFields.js';
 
 /**
  * Analyze dominant color of the top header area of the slip
  */
 export function analyzeBankColor(ctx, width, height) {
-  const headerHeight = Math.max(10, Math.floor(height * 0.18));
+  const headerHeight = Math.min(height, Math.max(1, Math.floor(height * 0.18)));
   const imgData = ctx.getImageData(0, 0, width, headerHeight);
   const data = imgData.data;
 
@@ -64,48 +53,6 @@ export function analyzeBankColor(ctx, width, height) {
 }
 
 /**
- * Parse Mini-QR code payload from Thai bank slips (EMVCo / SlipVerify format)
- */
-export function parseSlipVerifyQR(qrText) {
-  if (!qrText) return null;
-
-  try {
-    let bankCode = null;
-    let transRef = null;
-
-    // 1. Official Standard SlipVerify Mini-QR: Tag 01 Length 03 = 0103[BOT_CODE]
-    const match0103 = qrText.match(/0103(\d{3})/);
-    if (match0103 && BOT_BANK_CODES[match0103[1]]) {
-      bankCode = BOT_BANK_CODES[match0103[1]];
-    }
-
-    // 2. Extract transaction reference
-    const matchRef = qrText.match(/02(\d{2})([A-Za-z0-9]+)/);
-    if (matchRef) {
-      const len = parseInt(matchRef[1], 10);
-      if (len > 0) transRef = matchRef[2].slice(0, len);
-    } else {
-      const generalRef = qrText.match(/[A-Z0-9]{12,30}/);
-      if (generalRef) transRef = generalRef[0];
-    }
-
-    // 3. Fallback bank search
-    if (!bankCode) {
-      for (const [code, bankId] of Object.entries(BOT_BANK_CODES)) {
-        if (qrText.includes(`00${code}`) || qrText.includes(`0${code}0`)) {
-          bankCode = bankId;
-          break;
-        }
-      }
-    }
-
-    return { bankCode, transRef, raw: qrText };
-  } catch {
-    return null;
-  }
-}
-
-/**
  * Extract transaction data from image file using Native Android ML Kit (when on APK) + JS OCR & QR
  */
 export async function parseSlipImage(file, merchantRules = {}, categories = []) {
@@ -137,7 +84,7 @@ export async function parseSlipImage(file, merchantRules = {}, categories = []) 
       img.onload = async () => {
         try {
           const canvas = document.createElement('canvas');
-          const maxDim = 1280;
+          const maxDim = 2000;
           let width = img.width;
           let height = img.height;
 
@@ -157,15 +104,17 @@ export async function parseSlipImage(file, merchantRules = {}, categories = []) 
           ctx.drawImage(img, 0, 0, width, height);
 
           // 1. Scan for QR code via jsQR
-          let detectedBankId = nativeSlip?.bankId || null;
-          let refCode = nativeSlip?.ref || null;
+          let detectedBankId = null;
+          let qrBankId = null;
+          let refCode = nativeSlip?.rawOcrText ? parseTextToSlipFields(nativeSlip.rawOcrText).refCode : null;
           try {
             const imgData = ctx.getImageData(0, 0, width, height);
             const qrCode = jsQR(imgData.data, width, height);
             if (qrCode && qrCode.data) {
               const qrParsed = parseSlipVerifyQR(qrCode.data);
               if (qrParsed) {
-                if (qrParsed.bankCode && !detectedBankId) detectedBankId = qrParsed.bankCode;
+                qrBankId = qrParsed.bankCode;
+                detectedBankId = qrBankId;
                 if (qrParsed.transRef && !refCode) refCode = qrParsed.transRef;
               }
             }
@@ -180,23 +129,26 @@ export async function parseSlipImage(file, merchantRules = {}, categories = []) 
           }
 
           // 3. Run Tesseract OCR (on Web, or quick 2.5s enrichment on Android if payee wasn't English)
-          let ocrParsed = null;
+          let ocrParsed = nativeSlip?.rawOcrText ? parseTextToSlipFields(nativeSlip.rawOcrText) : null;
           let rawOcrText = nativeSlip?.rawOcrText || '';
-          const shouldRunTesseract = !nativeSlip || !nativeSlip.amount || (nativeSlip.payee && nativeSlip.payee.startsWith('โอนจ่าย'));
+          const shouldRunTesseract = !nativeSlip || !ocrParsed?.amount || !ocrParsed?.payee || !ocrParsed?.date;
           if (shouldRunTesseract) {
-            const timeoutMs = nativeSlip?.amount ? 2500 : 5500;
+            const timeoutMs = 30000;
+            const { runSlipOCR } = await import('./ocrEngine');
             const ocrRes = await runSlipOCR(canvas, timeoutMs);
-            ocrParsed = ocrRes?.parsed;
+            ocrParsed = ocrRes?.parsed || ocrParsed;
             if (ocrRes?.text) rawOcrText = ocrRes.text;
           }
 
           if (ocrParsed) {
-            if (ocrParsed.bankId && !detectedBankId) detectedBankId = ocrParsed.bankId;
+            if (ocrParsed.bankId && !qrBankId) detectedBankId = ocrParsed.bankId;
             if (ocrParsed.refCode && !refCode) refCode = ocrParsed.refCode;
           }
 
+          detectedBankId = qrBankId || ocrParsed?.bankId || nativeSlip?.bankId || detectedBankId;
+
           // Strict Verification Gatekeeper: Must have actual amount found in receipt text
-          const finalAmount = nativeSlip?.amount || ocrParsed?.amount || null;
+          const finalAmount = ocrParsed?.ambiguousAmount ? null : ocrParsed?.amount || nativeSlip?.amount || null;
 
           if (!finalAmount || finalAmount <= 0) {
             resolve({
@@ -210,7 +162,7 @@ export async function parseSlipImage(file, merchantRules = {}, categories = []) 
             // Check if text has any general banking cues
             const lower = rawOcrText.toLowerCase();
             if (lower.includes('โอน') || lower.includes('transfer') || lower.includes('promptpay') || lower.includes('พร้อมเพย์')) {
-              detectedBankId = 'KBANK'; // Fallback to common Thai bank only if confirmed transaction
+              detectedBankId = 'OTHER';
             } else {
               resolve({
                 success: false,
@@ -220,21 +172,17 @@ export async function parseSlipImage(file, merchantRules = {}, categories = []) 
             }
           }
 
-          if (!refCode) {
-            const rnd = Math.floor(100000 + Math.random() * 900000);
-            const d = new Date();
-            const ymd = `${d.getFullYear()}${(d.getMonth() + 1).toString().padStart(2, '0')}${d.getDate().toString().padStart(2, '0')}`;
-            refCode = `${detectedBankId.slice(0, 3)}${ymd}${rnd}`;
-          }
-
-          const now = new Date();
-          const todayStr = now.toISOString().split('T')[0];
-          const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-
-          const finalPayee = ocrParsed?.payee || nativeSlip?.payee || getSuggestedPayee(file.name, detectedBankId);
-          const finalDate = ocrParsed?.date || nativeSlip?.date || todayStr;
-          const finalTime = nativeSlip?.time || ocrParsed?.time || timeStr;
-          const finalSender = ocrParsed?.sender || nativeSlip?.sender || 'บัญชีของฉัน';
+          // Missing fields stay visible for review instead of being fabricated.
+          const finalPayee = ocrParsed?.payee || (/^(?:โอน|MAKE by KBank)/.test(nativeSlip?.payee || '') ? '' : nativeSlip?.payee) || '';
+          const finalDate = ocrParsed?.date || '';
+          const finalTime = ocrParsed?.time || '';
+          const finalSender = ocrParsed?.sender || '';
+          const reviewWarnings = [];
+          if (!finalDate) reviewWarnings.push('อ่านวันที่ไม่ชัดเจน');
+          if (!finalTime) reviewWarnings.push('อ่านเวลาไม่ชัดเจน');
+          if (!finalPayee) reviewWarnings.push('อ่านชื่อผู้รับไม่ชัดเจน');
+          if (!refCode) reviewWarnings.push('ไม่พบเลขอ้างอิง');
+          if (detectedBankId === 'OTHER') reviewWarnings.push('ไม่ทราบธนาคาร');
 
           let thumbnail = nativeSlip?.slipThumbnail || '';
           if (!thumbnail) {
@@ -271,7 +219,8 @@ export async function parseSlipImage(file, merchantRules = {}, categories = []) 
               slipThumbnail: thumbnail,
               isManual: false,
               rawFilename: file.name,
-              ocrConfidence: (nativeSlip?.amount || ocrParsed?.amount) ? 'high' : 'medium',
+              ocrConfidence: reviewWarnings.length ? 'low' : 'medium',
+              reviewWarnings,
               rawOcrText
             }
           });
@@ -294,20 +243,6 @@ export async function parseSlipImage(file, merchantRules = {}, categories = []) 
 
     reader.readAsDataURL(file);
   });
-}
-
-function getSuggestedPayee(filename = '', bankId = 'KBANK') {
-  const bankNames = {
-    KBANK: 'โอนจ่าย K PLUS',
-    SCB: 'โอนจ่าย SCB EASY',
-    KTB: 'โอนจ่าย Krungthai NEXT',
-    BAY: 'โอนจ่าย KMA กรุงศรี',
-    TTB: 'โอนจ่าย ttb touch',
-    MAKE: 'Cloud Pocket ชำระเงิน',
-    DIME: 'โอนจ่าย Dime!',
-    TRUEMONEY: 'TrueMoney สแกนจ่าย'
-  };
-  return bankNames[bankId] || 'โอนจ่ายสแกน QR';
 }
 
 export const SAMPLE_TEST_SLIPS = [
@@ -392,3 +327,4 @@ export const SAMPLE_TEST_SLIPS = [
     time: '08:45'
   }
 ];
+

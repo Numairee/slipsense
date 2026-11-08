@@ -17,7 +17,6 @@ import { Storage } from './utils/storage';
 import { exportTransactionsToCSV } from './utils/csvExporter';
 import { sound } from './utils/sound';
 import { AutoScanner } from './utils/galleryAutoScanner';
-import confetti from 'canvas-confetti';
 
 export default function App() {
   const [transactions, setTransactions] = useState(() => Storage.getTransactions());
@@ -29,6 +28,7 @@ export default function App() {
 
   // Modals & Feedback
   const [isScanOpen, setIsScanOpen] = useState(false);
+  const [pendingScanItems, setPendingScanItems] = useState([]);
   const [isManualOpen, setIsManualOpen] = useState(false);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [isAlbumPickerOpen, setIsAlbumPickerOpen] = useState(false);
@@ -65,6 +65,7 @@ export default function App() {
 
   // Trigger Automatic Gallery Scanning (ไม่ต้องเลือกรูปเอง)
   const handleTriggerAutoScan = async (isSilentOnStartup = false) => {
+    if (isAutoScanning) return;
     if (!AutoScanner.isNative()) {
       setIsScanOpen(true);
       return;
@@ -75,8 +76,8 @@ export default function App() {
 
     if (!isSilentOnStartup) {
       setScanToast({
-        title: 'กำลังสแกนโฟลเดอร์ธนาคาร ⚡',
-        message: 'กำลังตรวจหาโฟลเดอร์และอ่านสลิปทุกใบ...'
+        title: 'กำลังตรวจรูปภาพทุกโฟลเดอร์ ⚡',
+        message: 'ค้นหาสลิปจากทุกรูปที่แอปมีสิทธิ์อ่าน อาจใช้เวลาหลายนาที'
       });
     }
 
@@ -84,7 +85,7 @@ export default function App() {
       progressListener = await AutoScanner.addProgressListener((data) => {
         if (!isSilentOnStartup) {
           setScanToast({
-            title: 'กำลังกวาดอ่านสลิปธนาคาร ⚡',
+            title: 'กำลังตรวจรูปภาพในเครื่อง ⚡',
             message: `ตรวจแล้ว ${data.scanned} จาก ${data.total} รูป...`,
             progress: data
           });
@@ -95,22 +96,12 @@ export default function App() {
       setIsAutoScanning(false);
 
       if (res && res.success && res.newSlips && res.newSlips.length > 0) {
-        syncMonthToLatestSlip(res.newSlips);
-        const updated = Storage.addBatchTransactions(res.newSlips);
-        setTransactions(updated);
-
-        sound.playCrunch();
-        setTimeout(() => {
-          confetti({
-            particleCount: 50,
-            spread: 80,
-            origin: { y: 0.25 }
-          });
-        }, 250);
+        setPendingScanItems(res.newSlips);
+        setIsScanOpen(true);
 
         setScanToast({
           title: `พบสลิปใหม่ ${res.newSlips.length} ใบ! ⚡`,
-          message: `บันทึกยอดเงินเข้าภาพรวมเรียบร้อยแล้ว (ข้ามสลิปซ้ำ ${res.duplicatesCount || 0} ใบ)`
+          message: `ตรวจสอบข้อมูลก่อนบันทึก (ข้ามสลิปซ้ำ ${res.duplicatesCount || 0} ใบ)`
         });
 
         setTimeout(() => setScanToast(null), 5000);
@@ -126,7 +117,7 @@ export default function App() {
         const dupMsg = res?.duplicatesCount > 0 ? ` (พบสลิปที่เคยบันทึกแล้ว ${res.duplicatesCount} ใบ)` : '';
         setScanToast({
           title: `ตรวจครบ ${res?.totalScanned || 0} รูปแล้ว${dupMsg}`,
-          message: 'ไม่พบสลิปใหม่เพิ่มเติม หากสลิปอยู่ในโฟลเดอร์อื่น สามารถกด "เลือกโฟลเดอร์" ได้เลย',
+          message: res?.limitedAccess ? 'Android อนุญาตเฉพาะบางรูป หากต้องการสแกนทั้งหมด ให้เปิดสิทธิ์รูปภาพทั้งหมดในการตั้งค่าแอป' : 'ตรวจรูปที่แอปมีสิทธิ์อ่านครบแล้ว ไม่พบสลิปใหม่ที่อ่านข้อมูลได้',
           actionLabel: 'เลือกโฟลเดอร์',
           onAction: () => setIsAlbumPickerOpen(true)
         });
@@ -170,22 +161,12 @@ export default function App() {
       setIsAutoScanning(false);
 
       if (res && res.success && res.newSlips && res.newSlips.length > 0) {
-        syncMonthToLatestSlip(res.newSlips);
-        const updated = Storage.addBatchTransactions(res.newSlips);
-        setTransactions(updated);
-
-        sound.playCrunch();
-        setTimeout(() => {
-          confetti({
-            particleCount: 50,
-            spread: 80,
-            origin: { y: 0.25 }
-          });
-        }, 250);
+        setPendingScanItems(res.newSlips);
+        setIsScanOpen(true);
 
         setScanToast({
           title: `พบสลิปใหม่ ${res.newSlips.length} ใบ ใน "${bucketName}"! 🎉`,
-          message: `บันทึกเข้าสู่ระบบเรียบร้อยแล้ว (ข้ามสลิปซ้ำ ${res.duplicatesCount || 0} ใบ)`
+          message: `ตรวจสอบข้อมูลก่อนบันทึก (ข้ามสลิปซ้ำ ${res.duplicatesCount || 0} ใบ)`
         });
         setTimeout(() => setScanToast(null), 5000);
       } else {
@@ -318,55 +299,15 @@ export default function App() {
     setTimeout(() => setScanToast(null), 4000);
   };
 
-  // Clear all and re-scan fresh from device gallery
+  // Clear and rescan uses the same review flow as every other import.
   const handleClearAndRescan = async () => {
     sound.playPop();
-    Storage.saveTransactions([]);
-    setTransactions([]);
-
-    if (!AutoScanner.isNative()) {
-      setIsScanOpen(true);
+    if (!Storage.saveTransactions([])) {
+      setScanToast({ title: 'ล้างข้อมูลไม่สำเร็จ', message: 'ไม่สามารถเขียนข้อมูลลงในเครื่องได้ กรุณาลองอีกครั้ง' });
       return;
     }
-
-    setIsAutoScanning(true);
-    const res = await AutoScanner.scanNativeGallery([], categories, merchantRules);
-    setIsAutoScanning(false);
-
-    if (res && res.success && res.newSlips && res.newSlips.length > 0) {
-      syncMonthToLatestSlip(res.newSlips);
-      const updated = Storage.addBatchTransactions(res.newSlips);
-      setTransactions(updated);
-
-      sound.playCrunch();
-      setTimeout(() => {
-        confetti({
-          particleCount: 50,
-          spread: 80,
-          origin: { y: 0.25 }
-        });
-      }, 300);
-
-      setScanToast({
-        title: `สแกนใหม่สำเร็จ พบสลิปจริง ${res.newSlips.length} ใบ! ⚡`,
-        message: `คัดกรองเฉพาะสลิปโอนเงินจริงเรียบร้อยแล้ว`
-      });
-      setTimeout(() => setScanToast(null), 5000);
-    } else {
-      setScanToast({
-        title: 'ล้างข้อมูลเรียบร้อยแล้ว',
-        message: 'ไม่พบสลิปธนาคารใหม่ในเครื่อง หรือคุณสามารถกดเลือกรูปสลิปเองได้',
-        actionLabel: 'เลือกรูปสลิป',
-        onAction: () => setIsScanOpen(true)
-      });
-      setTimeout(() => setScanToast(null), 5500);
-    }
-  };
-
-  // Clear merchant rules
-  const handleClearMerchantRules = () => {
-    localStorage.removeItem('pygmy_merchant_rules_v1');
-    setMerchantRules({});
+    setTransactions([]);
+    await handleTriggerAutoScan(false);
   };
 
   return (
@@ -477,14 +418,15 @@ export default function App() {
         transactionsCount={transactions.length}
       />
 
-      <ScanModal
+      {isScanOpen && <ScanModal
         isOpen={isScanOpen}
-        onClose={() => setIsScanOpen(false)}
+        onClose={() => { setIsScanOpen(false); setPendingScanItems([]); }}
+        initialItems={pendingScanItems}
         categories={categories}
         merchantRules={merchantRules}
         existingTransactions={transactions}
         onImportBatch={handleImportBatch}
-      />
+      />}
 
       <ManualAddModal
         isOpen={isManualOpen}
@@ -509,3 +451,4 @@ export default function App() {
     </div>
   );
 }
+

@@ -3,6 +3,7 @@
 
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { parseSlipImage, SAMPLE_TEST_SLIPS } from './slipParser';
+import { isDuplicateSlip, parseTextToSlipFields } from './slipFields.js';
 import { matchCategory } from '../data/defaultCategories';
 
 const GalleryScanner = registerPlugin('GalleryScanner');
@@ -38,20 +39,7 @@ export const AutoScanner = {
    * Check if a parsed slip is already recorded in transactions
    */
   isDuplicate(newTx, existingTransactions = []) {
-    return existingTransactions.some(ex => {
-      // 1. Same Ref Code
-      if (newTx.ref && ex.ref && newTx.ref === ex.ref) return true;
-      // 2. Same Bank + Amount + Date + Time
-      if (
-        ex.bankId === newTx.bankId &&
-        Number(ex.amount) === Number(newTx.amount) &&
-        ex.date === newTx.date &&
-        ex.time === newTx.time
-      ) {
-        return true;
-      }
-      return false;
-    });
+    return isDuplicateSlip(newTx, existingTransactions);
   },
 
   /**
@@ -83,8 +71,7 @@ export const AutoScanner = {
    */
   async scanAlbum(bucketName, existingTransactions = [], categories = [], merchantRules = {}) {
     return this.scanNativeGallery(existingTransactions, categories, merchantRules, {
-      bucketName,
-      limit: 2000
+      bucketName
     });
   },
 
@@ -92,13 +79,12 @@ export const AutoScanner = {
    * Native Android: Scans gallery photos directly via MediaStore & Google ML Kit on-device
    * Options:
    * - bucketName: if set, scans 100% of images in that specific folder
-   * - limit: max photos to inspect (default 500 for auto, 2000 for targeted folder)
+   * Without bucketName, inspect every image visible through MediaStore; no count cutoff.
    */
   async scanNativeGallery(existingTransactions = [], categories = [], merchantRules = {}, options = {}) {
     try {
       const res = await GalleryScanner.scanRecentSlips({
-        bucketName: options.bucketName || null,
-        limit: options.limit || (options.bucketName ? 2000 : 500)
+        bucketName: options.bucketName || null
       });
 
       if (!res) {
@@ -111,12 +97,23 @@ export const AutoScanner = {
         let duplicatesCount = 0;
 
         for (const slip of res.slips) {
+          const fields = parseTextToSlipFields(slip.rawOcrText || '');
           const categorizedSlip = {
             ...slip,
+            amount: fields.ambiguousAmount ? '' : fields.amount || slip.amount,
+            date: fields.date || '',
+            time: fields.time || '',
+            payee: fields.payee || (/^(?:โอน|MAKE by KBank)/.test(slip.payee || '') ? '' : slip.payee) || '',
+            ref: fields.refCode || slip.ref || '',
+            bankId: fields.bankId || slip.bankId || 'OTHER',
+            reviewWarnings: [
+              ...(!fields.date || !fields.time ? ['ตรวจวันที่และเวลาในภาพต้นฉบับ'] : []),
+              ...(res.limitedAccess ? ['Android อนุญาตเฉพาะบางรูป หากต้องการสแกนทั้งหมด ให้เลือกอนุญาตรูปภาพทั้งหมดในการตั้งค่าแอป'] : [])
+            ],
             categoryId: matchCategory(slip.payee, '', merchantRules, categories) || slip.categoryId || 'food'
           };
 
-          if (this.isDuplicate(categorizedSlip, existingTransactions)) {
+          if (this.isDuplicate(categorizedSlip, [...existingTransactions, ...newSlips])) {
             duplicatesCount++;
           } else {
             newSlips.push(categorizedSlip);
@@ -128,7 +125,8 @@ export const AutoScanner = {
           newSlips,
           duplicatesCount,
           totalScanned: res.count || res.slips.length,
-          targetBucket: res.targetBucket || options.bucketName || 'ALL_BANKS'
+          limitedAccess: !!res.limitedAccess,
+          targetBucket: res.targetBucket || options.bucketName || 'ALL_PHOTOS'
         };
       }
 
@@ -164,7 +162,7 @@ export const AutoScanner = {
             totalScanned++;
             const parseRes = await parseSlipImage(file, merchantRules, categories);
             if (parseRes.success && parseRes.data) {
-              if (this.isDuplicate(parseRes.data, existingTransactions)) {
+              if (this.isDuplicate(parseRes.data, [...existingTransactions, ...newSlips])) {
                 duplicatesCount++;
               } else {
                 newSlips.push(parseRes.data);
@@ -238,3 +236,4 @@ export const AutoScanner = {
     return new File([u8arr], filename, { type: mime });
   }
 };
+

@@ -11,17 +11,17 @@ export default function SlipDetailModal({
   onSave,
   onDelete
 }) {
-  if (!transaction) return null;
 
-  const bank = getBankById(transaction.bankId);
-  const [selectedCatId, setSelectedCatId] = useState(transaction.categoryId);
-  const [note, setNote] = useState(transaction.note || '');
-  const [payee, setPayee] = useState(transaction.payee || '');
-  const [amount, setAmount] = useState(transaction.amount || 0);
+  const bank = getBankById(transaction?.bankId);
+  const [selectedCatId, setSelectedCatId] = useState(transaction?.categoryId);
+  const [note, setNote] = useState(transaction?.note || '');
+  const [payee, setPayee] = useState(transaction?.payee || '');
+  const [amount, setAmount] = useState(transaction?.amount || 0);
   const [rememberMerchant, setRememberMerchant] = useState(true);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
 
   useEffect(() => {
+    if (!transaction) return;
     setSelectedCatId(transaction.categoryId);
     setNote(transaction.note || '');
     setPayee(transaction.payee || '');
@@ -51,6 +51,8 @@ export default function SlipDetailModal({
       maximumFractionDigits: 2
     });
   };
+
+  if (!transaction) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-md transition-opacity animate-fade-in">
@@ -255,3 +257,4 @@ export default function SlipDetailModal({
     </div>
   );
 }
+

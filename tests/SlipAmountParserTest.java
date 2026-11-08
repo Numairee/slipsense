@@ -16,7 +16,8 @@ public class SlipAmountParserTest {
         check("Account 1234567890\nค่าธรรมเนียม 10.00", 0);
         check("Amount 100.00\nAmount 200.00", 0);
         check("Amount 2026.00", 2026);
-        String validQr = "01030040214ABC010300612345";
+        String reference = "ABC010300612345";
+        String validQr = "010300402" + String.format("%02d", reference.length()) + reference;
         if (SlipQrParser.parse(validQr) == null || !SlipQrParser.parse(validQr)[1].equals("ABC010300612345")) throw new AssertionError("Mini-QR");
         if (SlipQrParser.parse("https://example.com/01030040212ABC123456789") != null) throw new AssertionError("URL");
         if (SlipQrParser.parse(validQr.substring(0, validQr.length() - 1)) != null) throw new AssertionError("Truncated QR");

@@ -41,6 +41,9 @@ jobs:
           npm run build
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
       - name: Sync Capacitor to Android
         run: npx cap sync android
       - name: Build Release APK

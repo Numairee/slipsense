@@ -71,8 +71,7 @@ export const AutoScanner = {
    */
   async scanAlbum(bucketName, existingTransactions = [], categories = [], merchantRules = {}) {
     return this.scanNativeGallery(existingTransactions, categories, merchantRules, {
-      bucketName,
-      limit: 2000
+      bucketName
     });
   },
 
@@ -80,13 +79,12 @@ export const AutoScanner = {
    * Native Android: Scans gallery photos directly via MediaStore & Google ML Kit on-device
    * Options:
    * - bucketName: if set, scans 100% of images in that specific folder
-   * - limit: max photos to inspect (default 500 for auto, 2000 for targeted folder)
+   * Without bucketName, inspect every image visible through MediaStore; no count cutoff.
    */
   async scanNativeGallery(existingTransactions = [], categories = [], merchantRules = {}, options = {}) {
     try {
       const res = await GalleryScanner.scanRecentSlips({
-        bucketName: options.bucketName || null,
-        limit: options.limit || (options.bucketName ? 2000 : 500)
+        bucketName: options.bucketName || null
       });
 
       if (!res) {
@@ -108,7 +106,10 @@ export const AutoScanner = {
             payee: fields.payee || (/^(?:โอน|MAKE by KBank)/.test(slip.payee || '') ? '' : slip.payee) || '',
             ref: fields.refCode || slip.ref || '',
             bankId: fields.bankId || slip.bankId || 'OTHER',
-            reviewWarnings: !fields.date || !fields.time ? ['ตรวจวันที่และเวลาในภาพต้นฉบับ'] : [],
+            reviewWarnings: [
+              ...(!fields.date || !fields.time ? ['ตรวจวันที่และเวลาในภาพต้นฉบับ'] : []),
+              ...(res.limitedAccess ? ['Android อนุญาตเฉพาะบางรูป หากต้องการสแกนทั้งหมด ให้เลือกอนุญาตรูปภาพทั้งหมดในการตั้งค่าแอป'] : [])
+            ],
             categoryId: matchCategory(slip.payee, '', merchantRules, categories) || slip.categoryId || 'food'
           };
 
@@ -124,7 +125,8 @@ export const AutoScanner = {
           newSlips,
           duplicatesCount,
           totalScanned: res.count || res.slips.length,
-          targetBucket: res.targetBucket || options.bucketName || 'ALL_BANKS'
+          limitedAccess: !!res.limitedAccess,
+          targetBucket: res.targetBucket || options.bucketName || 'ALL_PHOTOS'
         };
       }
 

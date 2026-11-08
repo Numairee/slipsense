@@ -83,16 +83,17 @@ export default function AlbumPickerModal({
               </div>
               <div className="text-left">
                 <div className="leading-tight font-black">
-                  สแกนทุกโฟลเดอร์ธนาคารอัตโนมัติ ⚡
+                  ค้นหาสลิปจากรูปทั้งหมดในเครื่อง ⚡
                 </div>
                 <div className="text-[10px] text-emerald-100 font-medium mt-0.5">
-                  ค้นหาจาก K PLUS, SCB, NEXT, KMA, ttb, ภาพหน้าจอ ทั้งหมดในคราวเดียว
+                  ตรวจทุกโฟลเดอร์ที่อนุญาต ไม่มีจำกัดจำนวนรูป อาจใช้เวลาหลายนาที
                 </div>
               </div>
             </div>
             <ChevronRight className="w-4 h-4 shrink-0 text-white/80" />
           </button>
 
+          <p className="text-xs text-neutral-400">หากต้องการตรวจครบ ให้ตั้งสิทธิ์รูปภาพเป็น “อนุญาตทั้งหมด” รูปที่อยู่เฉพาะบนคลาวด์หรือในพื้นที่ส่วนตัวของแอปอื่นจะไม่ปรากฏในการสแกน</p>
           {/* Album List */}
           <div className="space-y-3">
             <div className="flex items-center justify-between px-1">
@@ -261,3 +262,4 @@ export default function AlbumPickerModal({
     </div>
   );
 }
+

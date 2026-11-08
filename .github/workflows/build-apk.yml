@@ -1,89 +1,80 @@
 name: Build & Release SlipSense Android APK
 
 on:
+  pull_request:
   push:
-    branches: [ main ]
-    tags: [ 'v*' ]
+    branches: [main]
+    tags: ['v*']
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build-apk:
     name: Build SlipSense APK
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: write
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
       - name: Set up Java 21
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
+          distribution: temurin
           java-version: '21'
-
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: 'npm'
-
-      - name: Install Web Dependencies & Build
+          cache: npm
+      - name: Read release version
+        id: release
+        run: |
+          VERSION=$(node -p "JSON.parse(require('fs').readFileSync('package.json', 'utf8')).version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "apk=SlipSense-v$VERSION.apk" >> "$GITHUB_OUTPUT"
+      - name: Install, test and build web app
         run: |
           npm ci
+          npm test
           npm run build
-
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
-
       - name: Sync Capacitor to Android
+        run: npx cap sync android
+      - name: Build Release APK
         run: |
-          npx cap sync android
-
-      - name: Grant execute permission for gradlew
-        run: chmod +x android/gradlew
-
-      - name: Build Release APK with Gradle
-        run: |
+          chmod +x android/gradlew
           cd android
           ./gradlew assembleRelease --no-daemon
-
-      - name: Prepare Release APK Artifact
-        run: |
-          cp android/app/build/outputs/apk/release/app-release.apk SlipSense-v2.0.0.apk
-
-      - name: Upload APK to Artifacts
+      - name: Prepare APK
+        env:
+          APK_NAME: ${{ steps.release.outputs.apk }}
+        run: cp android/app/build/outputs/apk/release/app-release.apk "$APK_NAME"
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SlipSense-v2.0.0-APK
-          path: SlipSense-v2.0.0.apk
+          name: SlipSense-v${{ steps.release.outputs.version }}-APK
+          path: ${{ steps.release.outputs.apk }}
           retention-days: 30
-
-      - name: Create GitHub Release with APK
+      - name: Publish GitHub Release
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main'
         with:
-          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'v2.0.0' }}
-          name: ${{ startsWith(github.ref, 'refs/tags/') && format('SlipSense {0} (Smart Slip & Wealth Intelligence)', github.ref_name) || 'SlipSense v2.0.0 (Smart Slip & Wealth Intelligence)' }}
+          tag_name: v${{ steps.release.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          name: SlipSense v${{ steps.release.outputs.version }}
           body: |
-            ## ⚡ SlipSense v2.0.0 — Smart Slip & Wealth Intelligence
-            **แอปบันทึกรายจ่ายจากสลิปธนาคารอัตโนมัติ พร้อมระบบวิเคราะห์การเงินอัจฉริยะในตัวเครื่อง 100%**
-            
-            ### ✨ ไฮไลท์การอัปเดตครั้งใหญ่ (Major Release):
-            - 🚀 **แก้ปัญหาตรวจพบ 0 สลิป:** แก้ไขอัลกอริทึม Downsampling ในระดับ Native (`GalleryScannerPlugin`) ป้องกันการหน่วงค้าง พร้อมปรับลดความละเอียดภาพให้ Google ML Kit อ่านค่าได้แม่นยำและรวดเร็ว
-            - 🔍 **แยกแยะธนาคารแม่นยำ:** รองรับสลิปธนาคารไทยครบทุกแห่ง (กสิกรไทย, ไทยพาณิชย์, กรุงไทย, กรุงเทพ, กรุงศรี, ทีทีบี, ออมสิน, ทรูมันนี่, ฯลฯ) พร้อมระบบตรวจจับคู่สีและ OCR ข้อความ
-            - 🛡️ **รูปจริงในเครื่องปลอดภัย 100%:** สแกนแบบ Read-Only ไม่มีการลบ ดัดแปลง หรือเคลื่อนย้ายรูปภาพในอัลบั้มเครื่อง
-            - 📊 **Financial Intelligence Engine:** แดชบอร์ดวิเคราะห์การเงินสไตล์ Dark Fintech (Revolut / Apple Card):
-              - คำนวณคะแนนสุขภาพการเงิน (Health Score 0–100, เกรด S/A/B/C/D)
-              - ระบบคาดการณ์ยอดใช้จ่ายสิ้นเดือน (Burn Rate & Month-End Forecast)
-              - เรดาร์ตรวจจับเงินรั่วไหล (Money Leaks Radar)
-              - วิเคราะห์ช่วงเวลาใช้เงิน และสัดส่วนเงินไหลออกจากแต่ละธนาคาร
-            - 🎯 **ระบบจัดการงบประมาณ (Budgets):** ตั้งงบรายหมวดและคำนวณเงินที่ใช้ได้ปลอดภัยต่อวัน (Daily Safe-to-Spend)
-            - 🧹 **ปุ่มล้างข้อมูลแอป (Reset App):** ล้างข้อมูลเฉพาะในตัวแอปได้ทันทีโดยไม่แตะต้องอัลบั้มรูปในมือถือ
+            ## SlipSense v${{ steps.release.outputs.version }}
+            - ค้นหาสลิปจากทุกรูปในทุกโฟลเดอร์ที่แอปมีสิทธิ์อ่าน ไม่มีจำกัดจำนวนรูป
+            - ปรับการแยกยอดเงิน ค่าธรรมเนียม เลขไทย วันที่ และ Mini-QR
+            - ตรวจแก้ข้อมูลพร้อมภาพสลิปก่อนบันทึก และตรวจสลิปซ้ำในชุดเดียวกัน
+            - แสดงความคืบหน้าและแจ้งกรณี Android อนุญาตเฉพาะบางรูป
+            - แก้กรณีสแกนค้างและบันทึกไม่สำเร็จ
 
-            ### 📥 วิธีติดตั้งลงมือถือ (Android / iQOO / Samsung / Xiaomi / Vivo):
-            1. ดาวน์โหลดไฟล์ `SlipSense-v2.0.0.apk` ด้านล่าง
-            2. แตะเปิดไฟล์เพื่อติดตั้ง (เลือก "อนุญาตให้ติดตั้งจากแหล่งนี้" หากระบบถาม)
-            3. ใช้งานได้ทันที 100% Offline ไม่ต้องต่อเน็ต ไม่มีการเก็บหรือส่งข้อมูลออกนอกเครื่อง
-          files: SlipSense-v2.0.0.apk
+            เลือกสิทธิ์รูปภาพเป็น “อนุญาตทั้งหมด” เพื่อให้สแกนได้ครบ รูปที่อยู่เฉพาะบนคลาวด์หรือในพื้นที่ส่วนตัวของแอปอื่นจะไม่ถูกอ่าน
+            การตรวจทุกรูปไม่ได้รับประกันว่าจะอ่านสลิปทุกใบสำเร็จ กรุณาตรวจยอด วันที่ และผู้รับก่อนบันทึก
+          files: ${{ steps.release.outputs.apk }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

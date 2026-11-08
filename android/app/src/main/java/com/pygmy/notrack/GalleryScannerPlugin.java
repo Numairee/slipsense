@@ -299,13 +299,15 @@ public class GalleryScannerPlugin extends Plugin {
 
     /**
      * 100% Complete Exhaustive Scanner (NO LIMIT, NO CUTOFF):
-     * - Scans EVERY SINGLE PHOTO in target folder or bank folders from #1 to the end.
+     * - Scans EVERY SINGLE PHOTO in target folder or the entire accessible photo library from #1 to the end.
      * - Dispatches live progress events to UI: current / total.
      */
     private void executeGalleryScan(PluginCall call) {
         new Thread(() -> {
             try {
                 String targetBucket = call.getString("bucketName", null);
+                boolean limitedAccess = Build.VERSION.SDK_INT >= 34 &&
+                    getContext().checkSelfPermission(Manifest.permission.READ_MEDIA_IMAGES) != PackageManager.PERMISSION_GRANTED;
 
                 ContentResolver resolver = getContext().getContentResolver();
                 Uri collection;
@@ -362,7 +364,8 @@ public class GalleryScannerPlugin extends Plugin {
                             } else {
                                 if (cm.isBankSource) {
                                     highPriorityList.add(cm);
-                                } else if (isLikelySlipContainer(cm.name, cm.bucket)) {
+                                } else {
+                                    // Include every accessible image, even in custom folders.
                                     standardList.add(cm);
                                 }
                             }
@@ -394,11 +397,12 @@ public class GalleryScannerPlugin extends Plugin {
                     // Emit live progress event to JS
                     if (scannedCount % 5 == 0 || scannedCount == totalToScan) {
                         JSObject progress = new JSObject();
+                        progress.put("limitedAccess", limitedAccess);
                         progress.put("scanned", scannedCount);
                         progress.put("total", totalToScan);
                         progress.put("found", parsedSlips.length());
                         progress.put("percent", totalToScan > 0 ? (int)((scannedCount * 100.0) / totalToScan) : 100);
-                        progress.put("targetBucket", targetBucket != null ? targetBucket : "ALL_BANKS");
+                        progress.put("targetBucket", targetBucket != null ? targetBucket : "ALL_PHOTOS");
                         notifyListeners("scanProgress", progress);
                     }
                 }
@@ -408,9 +412,10 @@ public class GalleryScannerPlugin extends Plugin {
                 JSObject res = new JSObject();
                 res.put("success", true);
                 res.put("slips", parsedSlips);
+                res.put("limitedAccess", limitedAccess);
                 res.put("count", scannedCount);
                 res.put("total", totalToScan);
-                res.put("targetBucket", targetBucket != null ? targetBucket : "ALL_BANKS");
+                res.put("targetBucket", targetBucket != null ? targetBucket : "ALL_PHOTOS");
                 call.resolve(res);
 
             } catch (Exception e) {

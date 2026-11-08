@@ -1,7 +1,7 @@
 // 100% Local On-Device Storage for Pygmy
 // No servers, no tracking, completely private & offline
 
-import { DEFAULT_CATEGORIES } from '../data/defaultCategories';
+import { DEFAULT_CATEGORIES } from '../data/defaultCategories.js';
 
 const STORAGE_KEYS = {
   TRANSACTIONS: 'pygmy_transactions_v1',
@@ -140,7 +140,7 @@ export const Storage = {
   addBatchTransactions(txList) {
     const list = this.getTransactions();
     const updated = [...txList, ...list];
-    this.saveTransactions(updated);
+    if (!this.saveTransactions(updated)) throw new Error('ไม่สามารถบันทึกข้อมูลได้');
     return updated;
   },
 
@@ -302,3 +302,4 @@ export const Storage = {
     };
   }
 };
+

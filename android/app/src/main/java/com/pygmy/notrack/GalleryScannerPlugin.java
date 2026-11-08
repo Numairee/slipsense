@@ -549,11 +549,6 @@ public class GalleryScannerPlugin extends Plugin {
         String folderBank = detectBankFromFolderOrFile(fileName, bucketName);
         String colorBank = detectBankFromConcentratedLogoHSV(bmp);
 
-        // If no QR code and not from bank folder / no bank color -> SKIP IMMEDIATELY! (Zero false positives & ultra fast)
-        if (!hasSlipVerifyQR && !isBankSource && folderBank == null && colorBank == null) {
-            return null;
-        }
-
         // 2. Scan OCR text
         String ocrText = "";
         if (textRecognizer != null) {
@@ -587,16 +582,11 @@ public class GalleryScannerPlugin extends Plugin {
             }
         }
 
-        // If amount was not extracted yet, try fallback
-        if (extractedAmount <= 0.0) {
-            extractedAmount = extractAnyNumberFallback(ocrText);
-            if (extractedAmount <= 0.0 && !hasSlipVerifyQR) {
-                return null;
-            }
-        }
+        // A QR reference does not contain a trustworthy monetary amount.
+        if (extractedAmount <= 0.0) return null;
 
         // 3. Determine Bank ID with strict priority
-        String finalBankId = "KBANK";
+        String finalBankId = "OTHER";
         if (qrBankId != null) {
             finalBankId = qrBankId;
         } else if (textBank != null) {
@@ -673,66 +663,7 @@ public class GalleryScannerPlugin extends Plugin {
     }
 
     private double extractSmartAmount(String text) {
-        if (text == null || text.isEmpty()) return 0.0;
-
-        Pattern decPattern = Pattern.compile("([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{1,6})\\s*[.,]\\s*([0-9]{2})");
-        Pattern intPatternWithCues = Pattern.compile("(?i)(?:จำนวนเงิน|ยอดโอน|ยอดเงิน|amount|baht|thb|บาท|฿)[:\\s]*([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{1,6})\\b");
-
-        String[] lines = text.split("\n");
-        for (String line : lines) {
-            String lower = line.toLowerCase(Locale.ROOT);
-            if (lower.contains("จำนวน") || lower.contains("ยอด") || lower.contains("amount") ||
-                lower.contains("baht") || lower.contains("thb") || lower.contains("บาท") || lower.contains("฿")) {
-
-                Matcher dm = decPattern.matcher(line);
-                if (dm.find()) {
-                    try {
-                        String intPart = dm.group(1).replace(",", "").trim();
-                        String decPart = dm.group(2).trim();
-                        double val = Double.parseDouble(intPart + "." + decPart);
-                        if (isValidAmount(val)) return val;
-                    } catch (Exception ignored) {}
-                }
-
-                Matcher im = intPatternWithCues.matcher(line);
-                if (im.find()) {
-                    try {
-                        String rawNum = im.group(1).replace(",", "").trim();
-                        double val = Double.parseDouble(rawNum);
-                        if (isValidAmount(val)) return val;
-                    } catch (Exception ignored) {}
-                }
-            }
-        }
-
-        Matcher m = decPattern.matcher(text);
-        List<Double> candidateAmounts = new ArrayList<>();
-        while (m.find()) {
-            try {
-                String intPart = m.group(1).replace(",", "").trim();
-                String decPart = m.group(2).trim();
-                double val = Double.parseDouble(intPart + "." + decPart);
-                if (isValidAmount(val)) {
-                    candidateAmounts.add(val);
-                }
-            } catch (Exception ignored) {}
-        }
-
-        if (!candidateAmounts.isEmpty()) {
-            return candidateAmounts.get(0);
-        }
-
-        Pattern dashPattern = Pattern.compile("\\b([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{1,6})\\s*[.,]\\s*-\\b");
-        Matcher dashM = dashPattern.matcher(text);
-        if (dashM.find()) {
-            try {
-                String num = dashM.group(1).replace(",", "").trim();
-                double val = Double.parseDouble(num);
-                if (isValidAmount(val)) return val;
-            } catch (Exception ignored) {}
-        }
-
-        return 0.0;
+        return SlipAmountParser.parse(text);
     }
 
     private String extractDateFromText(String text, String fallbackDate) {
@@ -759,76 +690,19 @@ public class GalleryScannerPlugin extends Plugin {
         return fallbackDate;
     }
 
-    private double extractAnyNumberFallback(String text) {
-        if (text == null || text.isEmpty()) return 0.0;
-        Pattern p = Pattern.compile("\\b([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{2,6})\\b");
-        Matcher m = p.matcher(text);
-        while (m.find()) {
-            try {
-                double val = Double.parseDouble(m.group(1).replace(",", ""));
-                if (isValidAmount(val)) return val;
-            } catch (Exception ignored) {}
-        }
-        return 0.0;
-    }
-
-    private boolean isValidAmount(double val) {
-        if (val < 1.0 || val > 1000000.0) return false;
-        if (val == 2023.0 || val == 2024.0 || val == 2025.0 || val == 2026.0 ||
-            val == 2566.0 || val == 2567.0 || val == 2568.0 || val == 2569.0) {
-            return false;
-        }
-        return true;
-    }
 
     private boolean isAuthenticSlipQR(String qr) {
-        if (qr == null || qr.length() < 12) return false;
-        // 1. National ITMX SlipVerify Standard (BOT)
-        if (qr.contains("000001") && (qr.contains("5102TH") || qr.contains("0103"))) return true;
-        if (qr.startsWith("00") && qr.contains("0103") && qr.contains("5102TH")) return true;
-        // 2. PromptPay Transfer QR
-        if (qr.startsWith("000201") && (qr.contains("A000000677") || qr.contains("5802TH"))) return true;
-        // 3. TrueMoney
-        if (qr.contains("truemoney") || qr.contains("tmn") || qr.contains("0014A0000006770101")) return true;
-        return false;
+        return SlipQrParser.parse(qr) != null;
     }
 
     private static String detectBankFromQR(String qr) {
-        if (qr == null || qr.isEmpty()) return null;
-
-        Pattern p = Pattern.compile("0103(\\d{3})");
-        Matcher m = p.matcher(qr);
-        if (m.find()) {
-            String code = m.group(1);
-            String b = botCodeToBankId(code);
-            if (b != null) return b;
-        }
-
-        if (qr.contains("0004") || qr.contains("0040")) return "KBANK";
-        if (qr.contains("0014") || qr.contains("0140")) return "SCB";
-        if (qr.contains("0006") || qr.contains("0060")) return "KTB";
-        if (qr.contains("0025") || qr.contains("0250")) return "BAY";
-        if (qr.contains("0011") || qr.contains("0110")) return "TTB";
-        if (qr.contains("0002") || qr.contains("0020")) return "BBL";
-        if (qr.contains("0030") || qr.contains("0300")) return "GSB";
-        if (qr.contains("0069") || qr.contains("0690")) return "DIME";
-        if (qr.contains("0104") || qr.contains("1040") || qr.contains("truemoney")) return "TRUEMONEY";
-
-        return null;
+        String[] parsed = SlipQrParser.parse(qr);
+        return parsed == null ? null : botCodeToBankId(parsed[0]);
     }
 
     private static String extractRefFromQR(String qr) {
-        if (qr == null || qr.isEmpty()) return null;
-        try {
-            int sub02 = qr.indexOf("02");
-            if (sub02 != -1 && sub02 + 4 < qr.length()) {
-                int len = Integer.parseInt(qr.substring(sub02 + 2, sub02 + 4));
-                if (len >= 8 && sub02 + 4 + len <= qr.length()) {
-                    return qr.substring(sub02 + 4, sub02 + 4 + len);
-                }
-            }
-        } catch (Exception ignored) {}
-        return null;
+        String[] parsed = SlipQrParser.parse(qr);
+        return parsed == null ? null : parsed[1];
     }
 
     private static String botCodeToBankId(String code) {
@@ -944,13 +818,7 @@ public class GalleryScannerPlugin extends Plugin {
             return rm.group(1);
         }
 
-        Pattern tokenRef = Pattern.compile("\\b(?=[A-Za-z0-9]*\\d)[A-Za-z0-9]{12,35}\\b");
-        Matcher tm = tokenRef.matcher(text);
-        if (tm.find()) {
-            return tm.group(0);
-        }
-
-        return bankId + "_" + effectiveSec + "_" + id;
+        return "";
     }
 
     private String extractSmartPayee(String text, String bankId) {
@@ -1031,3 +899,4 @@ public class GalleryScannerPlugin extends Plugin {
         }
     }
 }
+

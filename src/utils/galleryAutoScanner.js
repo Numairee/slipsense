@@ -3,6 +3,7 @@
 
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { parseSlipImage, SAMPLE_TEST_SLIPS } from './slipParser';
+import { isDuplicateSlip, parseTextToSlipFields } from './slipFields.js';
 import { matchCategory } from '../data/defaultCategories';
 
 const GalleryScanner = registerPlugin('GalleryScanner');
@@ -38,20 +39,7 @@ export const AutoScanner = {
    * Check if a parsed slip is already recorded in transactions
    */
   isDuplicate(newTx, existingTransactions = []) {
-    return existingTransactions.some(ex => {
-      // 1. Same Ref Code
-      if (newTx.ref && ex.ref && newTx.ref === ex.ref) return true;
-      // 2. Same Bank + Amount + Date + Time
-      if (
-        ex.bankId === newTx.bankId &&
-        Number(ex.amount) === Number(newTx.amount) &&
-        ex.date === newTx.date &&
-        ex.time === newTx.time
-      ) {
-        return true;
-      }
-      return false;
-    });
+    return isDuplicateSlip(newTx, existingTransactions);
   },
 
   /**
@@ -111,12 +99,20 @@ export const AutoScanner = {
         let duplicatesCount = 0;
 
         for (const slip of res.slips) {
+          const fields = parseTextToSlipFields(slip.rawOcrText || '');
           const categorizedSlip = {
             ...slip,
+            amount: fields.ambiguousAmount ? '' : fields.amount || slip.amount,
+            date: fields.date || '',
+            time: fields.time || '',
+            payee: fields.payee || (/^(?:โอน|MAKE by KBank)/.test(slip.payee || '') ? '' : slip.payee) || '',
+            ref: fields.refCode || slip.ref || '',
+            bankId: fields.bankId || slip.bankId || 'OTHER',
+            reviewWarnings: !fields.date || !fields.time ? ['ตรวจวันที่และเวลาในภาพต้นฉบับ'] : [],
             categoryId: matchCategory(slip.payee, '', merchantRules, categories) || slip.categoryId || 'food'
           };
 
-          if (this.isDuplicate(categorizedSlip, existingTransactions)) {
+          if (this.isDuplicate(categorizedSlip, [...existingTransactions, ...newSlips])) {
             duplicatesCount++;
           } else {
             newSlips.push(categorizedSlip);
@@ -164,7 +160,7 @@ export const AutoScanner = {
             totalScanned++;
             const parseRes = await parseSlipImage(file, merchantRules, categories);
             if (parseRes.success && parseRes.data) {
-              if (this.isDuplicate(parseRes.data, existingTransactions)) {
+              if (this.isDuplicate(parseRes.data, [...existingTransactions, ...newSlips])) {
                 duplicatesCount++;
               } else {
                 newSlips.push(parseRes.data);
@@ -238,3 +234,4 @@ export const AutoScanner = {
     return new File([u8arr], filename, { type: mime });
   }
 };
+

@@ -1,9 +1,10 @@
 import React, { useState, useRef } from 'react';
-import { X, UploadCloud, Camera, Image, Check, AlertCircle, Sparkles, Loader2, Plus, ArrowRight, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { X, UploadCloud, Camera, Image, Sparkles, Loader2, Plus, ArrowRight } from 'lucide-react';
 import { parseSlipImage, SAMPLE_TEST_SLIPS } from '../utils/slipParser';
 import { getBankById } from '../data/banks';
-import { getCategoryById } from '../data/defaultCategories';
 import { sound } from '../utils/sound';
+import { isDuplicateSlip, canImportSlip } from '../utils/slipFields.js';
+import { BANK_LIST } from '../data/banks';
 import confetti from 'canvas-confetti';
 
 export default function ScanModal({
@@ -12,67 +13,51 @@ export default function ScanModal({
   categories,
   merchantRules,
   existingTransactions = [],
+  initialItems = [],
   onImportBatch
 }) {
-  if (!isOpen) return null;
 
   const [isProcessing, setIsProcessing] = useState(false);
-  const [extractedItems, setExtractedItems] = useState([]);
+  const [extractedItems, setExtractedItems] = useState(initialItems);
   const [dragOver, setDragOver] = useState(false);
   const [skipDuplicates, setSkipDuplicates] = useState(true);
   const [rejectedCount, setRejectedCount] = useState(0);
+  const [progress, setProgress] = useState('');
+  const [error, setError] = useState('');
+  const processingRef = useRef(false);
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
 
-  // Check if a transaction is a duplicate against existing database
-  const checkIsDuplicate = (item) => {
-    return existingTransactions.some(ex => {
-      // 1. Match by reference code
-      if (item.ref && ex.ref && item.ref === ex.ref) return true;
-      // 2. Match by bank + amount + date + time
-      if (
-        ex.bankId === item.bankId &&
-        Number(ex.amount) === Number(item.amount) &&
-        ex.date === item.date &&
-        ex.time === item.time
-      ) {
-        return true;
-      }
-      return false;
-    });
-  };
+  const checkIsDuplicate = item => isDuplicateSlip(item, existingTransactions);
 
   const handleFiles = async (files) => {
-    if (!files || files.length === 0) return;
-
+    if (!files?.length || processingRef.current) return;
+    processingRef.current = true;
     setIsProcessing(true);
-    sound.playPop();
-
+    setError('');
     const newItems = [];
     let rejected = 0;
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      if (!file.type.startsWith('image/')) continue;
-      const res = await parseSlipImage(file, merchantRules, categories);
-      if (res.success && res.data) {
-        const isDup = checkIsDuplicate(res.data);
-        newItems.push({
-          ...res.data,
-          isDuplicate: isDup
-        });
-      } else {
-        rejected++;
+    try {
+      const selected = Array.from(files);
+      for (let i = 0; i < selected.length; i++) {
+        const file = selected[i];
+        setProgress(`${i + 1} / ${selected.length}`);
+        if (!file.type.startsWith('image/')) { rejected++; continue; }
+        try {
+          const res = await parseSlipImage(file, merchantRules, categories);
+          if (res.success && res.data) newItems.push(res.data);
+          else rejected++;
+        } catch { rejected++; }
       }
-    }
-
-    if (rejected > 0) {
       setRejectedCount(prev => prev + rejected);
-    }
-    setExtractedItems(prev => [...newItems, ...prev]);
-    setIsProcessing(false);
-
-    if (newItems.length > 0) {
-      sound.playCrunch();
+      setExtractedItems(prev => [...prev, ...newItems]);
+      if (newItems.length) sound.playCrunch();
+    } finally {
+      processingRef.current = false;
+      setIsProcessing(false);
+      setProgress('');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      if (cameraInputRef.current) cameraInputRef.current.value = '';
     }
   };
 
@@ -123,28 +108,33 @@ export default function ScanModal({
     setExtractedItems(prev => prev.filter((_, i) => i !== idx));
   };
 
-  const itemsToImport = extractedItems.filter(item => {
-    if (skipDuplicates && item.isDuplicate) return false;
-    return true;
-  });
+  const reviewedItems = extractedItems.map((item, idx) => ({
+    ...item,
+    isDuplicate: isDuplicateSlip(item, [...existingTransactions, ...extractedItems.slice(0, idx)])
+  }));
+  const itemsToImport = reviewedItems.filter(item =>
+    !(skipDuplicates && item.isDuplicate) && canImportSlip(item));
+  const duplicateItemsCount = reviewedItems.filter(item => item.isDuplicate).length;
 
-  const duplicateItemsCount = extractedItems.filter(item => item.isDuplicate).length;
-
-  const handleConfirmImport = () => {
-    if (itemsToImport.length === 0) return;
-
-    sound.playCrunch();
-    setTimeout(() => {
-      confetti({
-        particleCount: 50,
-        spread: 80,
-        origin: { y: 0.5 }
-      });
-    }, 200);
-
-    onImportBatch(itemsToImport);
-    onClose();
+  const handleUpdateField = (idx, field, value) => {
+    setExtractedItems(prev => prev.map((item, i) => i === idx ? { ...item, [field]: value } : item));
   };
+
+  const handleConfirmImport = async () => {
+    if (!itemsToImport.length || isProcessing) return;
+    try {
+      setError('');
+      await onImportBatch(itemsToImport.map(({ isDuplicate: _isDuplicate, ...item }) => ({ ...item, amount: Number(item.amount) })));
+      sound.playCrunch();
+      confetti({ particleCount: 50, spread: 80, origin: { y: 0.5 } });
+      setExtractedItems([]);
+      onClose();
+    } catch {
+      setError('บันทึกไม่สำเร็จ พื้นที่จัดเก็บอาจเต็ม กรุณาสำรองข้อมูลแล้วลองอีกครั้ง');
+    }
+  };
+
+  if (!isOpen) return null;
 
   const formatBaht = (num) => {
     return Number(num || 0).toLocaleString('th-TH', {
@@ -177,6 +167,8 @@ export default function ScanModal({
 
           <button
             onClick={onClose}
+            disabled={isProcessing}
+            aria-label="ปิดหน้าสแกน"
             className="w-8 h-8 rounded-full bg-neutral-800 hover:bg-neutral-700 flex items-center justify-center text-neutral-400 hover:text-white transition-colors"
           >
             <X className="w-4 h-4" />
@@ -185,6 +177,9 @@ export default function ScanModal({
 
         {/* Modal Body */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
+          {rejectedCount > 0 && <p role="status" className="text-xs text-amber-300">อ่านไม่ได้ {rejectedCount} ไฟล์ ลองใช้ภาพต้นฉบับที่เห็นสลิปครบทั้งใบ</p>}
+          <p className="text-xs text-neutral-400">ตรวจยอด วันที่ เวลา และผู้รับก่อนบันทึก ช่องที่อ่านไม่ชัดสามารถแก้ไขได้</p>
           {/* Upload Dropzone */}
           <div
             onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -217,7 +212,7 @@ export default function ScanModal({
               <div className="py-6 flex flex-col items-center justify-center text-neutral-400">
                 <Loader2 className="w-10 h-10 animate-spin text-cyan-400 mb-2" />
                 <span className="font-bold text-sm text-white">
-                  กำลังอ่านข้อมูลสลิปในเครื่อง...
+                  กำลังอ่านข้อมูลสลิปในเครื่อง... {progress}
                 </span>
                 <span className="text-xs text-neutral-400">
                   ตรวจจับธนาคาร, วันที่, จำนวนเงิน และตรวจเช็กสลิปซ้ำ
@@ -305,14 +300,14 @@ export default function ScanModal({
               </div>
 
               <div className="space-y-2">
-                {extractedItems.map((item, idx) => {
+                {reviewedItems.map((item, idx) => {
                   const bank = getBankById(item.bankId);
                   const isExcluded = skipDuplicates && item.isDuplicate;
 
                   return (
                     <div
                       key={item.id || idx}
-                      className={`p-3 rounded-2xl border transition-all flex items-center justify-between gap-2.5 ${
+                      className={`p-3 rounded-2xl border transition-all flex flex-wrap items-center justify-between gap-2.5 ${
                         isExcluded
                           ? 'bg-neutral-800/40 border-neutral-800 opacity-60'
                           : 'bg-neutral-800/80 border-neutral-700/80 shadow-md'
@@ -367,6 +362,23 @@ export default function ScanModal({
                           <X className="w-3.5 h-3.5" />
                         </button>
                       </div>
+                      <details className="w-full text-xs border-t border-neutral-700 pt-2">
+                        <summary className="cursor-pointer text-cyan-300">{canImportSlip(item) ? 'ตรวจสอบ / แก้ไขข้อมูล' : '⚠ กรุณากรอกข้อมูลที่อ่านไม่ครบ'}</summary>
+                        {item.slipThumbnail && <img src={item.slipThumbnail} alt="สลิปต้นฉบับ" className="max-h-64 mx-auto my-2 rounded-lg" />}
+                        {item.reviewWarnings?.length > 0 && <p className="text-amber-300 my-2">{item.reviewWarnings.join(' • ')}</p>}
+                        <div className="grid grid-cols-2 gap-2 mt-2">
+                          {[['amount', 'ยอดเงิน', 'number'], ['date', 'วันที่', 'date'], ['time', 'เวลา', 'time'], ['payee', 'ผู้รับเงิน', 'text'], ['sender', 'ผู้โอน', 'text'], ['ref', 'เลขอ้างอิง', 'text']].map(([field, label, type]) => (
+                            <label key={field} className="flex flex-col gap-1">{label}
+                              <input aria-label={label} type={type} value={item[field] ?? ''} min={type === 'number' ? '0.01' : undefined} step={type === 'number' ? '0.01' : undefined} onChange={e => handleUpdateField(idx, field, e.target.value)} className="w-full min-w-0 rounded-lg bg-neutral-900 border border-neutral-600 p-2 text-white" />
+                            </label>
+                          ))}
+                          <label>ธนาคาร
+                            <select aria-label="ธนาคาร" value={item.bankId} onChange={e => handleUpdateField(idx, 'bankId', e.target.value)} className="w-full bg-neutral-900 border border-neutral-600 rounded-lg p-2 mt-1">
+                              {BANK_LIST.map(bank => <option key={bank.id} value={bank.id}>{bank.name}</option>)}
+                            </select>
+                          </label>
+                        </div>
+                      </details>
                     </div>
                   );
                 })}
@@ -383,7 +395,7 @@ export default function ScanModal({
             </div>
             <button
               onClick={handleConfirmImport}
-              disabled={itemsToImport.length === 0}
+              disabled={isProcessing || itemsToImport.length === 0}
               className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 disabled:opacity-50 text-white font-extrabold text-xs shadow-lg shadow-cyan-500/20 active:scale-95 transition-all flex items-center gap-1.5"
             >
               <span>บันทึกเข้าสรุปยอด</span>
@@ -395,3 +407,4 @@ export default function ScanModal({
     </div>
   );
 }
+

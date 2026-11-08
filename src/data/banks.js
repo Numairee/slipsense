@@ -1,5 +1,9 @@
 // Thai Bank Definitions with official brand colors, codes, and OCR detection patterns
 export const THAI_BANKS = {
+  OTHER: {
+    id: 'OTHER', name: 'ไม่ทราบธนาคาร', shortName: 'ไม่ทราบ',
+    color: '#525252', textColor: '#ffffff', keywords: [], iconText: '?'
+  },
   KBANK: {
     id: 'KBANK',
     code: '004',
@@ -165,3 +169,4 @@ export function detectBankFromText(text = '') {
   }
   return THAI_BANKS.KBANK; // Common default if unknown
 }
+

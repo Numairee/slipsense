@@ -46,11 +46,17 @@ jobs:
           log-accepted-android-sdk-licenses: false
       - name: Sync Capacitor to Android
         run: npx cap sync android
+      - name: Download verified Gradle distribution
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v8.14.3 --repo gradle/gradle-distributions --pattern gradle-8.14.3-bin.zip --dir "$RUNNER_TEMP"
+          echo "bd71102213493060956ec229d946beee57158dbd89d0e62b91bca0fa2c5f3531  $RUNNER_TEMP/gradle-8.14.3-bin.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/gradle-8.14.3-bin.zip" -d "$RUNNER_TEMP"
       - name: Build Release APK
         run: |
-          chmod +x android/gradlew
           cd android
-          ./gradlew assembleRelease --no-daemon
+          "$RUNNER_TEMP/gradle-8.14.3/bin/gradle" assembleRelease --no-daemon
       - name: Prepare APK
         env:
           APK_NAME: ${{ steps.release.outputs.apk }}

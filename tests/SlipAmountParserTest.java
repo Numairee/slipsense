@@ -7,7 +7,14 @@ public class SlipAmountParserTest {
         double actual = SlipAmountParser.parse(text);
         if (Math.abs(actual - expected) > 0.00001) throw new AssertionError(text + ": " + actual);
     }
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
+        int sharedCount = 0;
+        for (String row : java.nio.file.Files.readAllLines(java.nio.file.Paths.get("tests/amount-cases.tsv"))) {
+            if (row.trim().isEmpty() || row.startsWith("#")) continue;
+            String[] fields = row.split("\t", 2);
+            check(fields[1].replace("\\n", "\n"), fields[0].equals("null") ? 0 : Double.parseDouble(fields[0]));
+            sharedCount++;
+        }
         check("ค่าธรรมเนียม 10.00 บาท\nจำนวนเงิน 1,250.75 บาท", 1250.75);
         check("Amount\n2,569.00\nFee 10.00", 2569);
         check("จำนวนเงิน ๑๒๓.๔๕ บาท", 123.45);
@@ -32,6 +39,7 @@ public class SlipAmountParserTest {
         if (SlipQrParser.parse("https://example.com/01030040212ABC123456789") != null) throw new AssertionError("URL");
         if (SlipQrParser.parse(validQr.substring(0, validQr.length() - 1)) != null) throw new AssertionError("Truncated QR");
         if (SlipQrParser.parse("01030045406100.00") != null) throw new AssertionError("Payment QR");
-        System.out.println("Native amount regression checks passed");
+        if (SlipQrParser.parse("000201" + validQr) != null) throw new AssertionError("Payment request");
+        System.out.println("Native amount regression checks passed, including " + sharedCount + " shared fixtures");
     }
 }

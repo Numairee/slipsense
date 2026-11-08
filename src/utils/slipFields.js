@@ -42,14 +42,14 @@ export function parseTextToSlipFields(rawText = '') {
   // Rank monetary candidates by their labels; dates, fees and account IDs are not amounts.
   const amountLabel = /จำนวนเงิน|ยอดเงิน|ยอดโอน|amount|โอนเงิน(?:จำนวน)?/i;
   const currency = /บาท|thb|baht|฿/i;
-  const excluded = /ค่าธรรมเนียม|fee|ยอดคงเหลือ|balance|เลขที่|อ้างอิง|reference|transaction\s*id|บัญชี|account/i;
+  const excluded = /ค่าธรรมเนียม|ค่าบริการ|เวลา|\btime\b|fee|ยอดคงเหลือ|balance|เลขที่|อ้างอิง|reference|transaction\s*id|บัญชี|account/i;
   const candidates = [];
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].replace(/(\d)\s*\.\s*-(?=\s*(?:บาท|THB|baht|฿)?\s*$)/i, '$1.00');
     if (excluded.test(line) || (i > 0 && excluded.test(lines[i - 1]) && !/\d/.test(lines[i - 1]))) continue;
     const labelled = amountLabel.test(line);
     const previousLabel = i > 0 && amountLabel.test(lines[i - 1]) && !excluded.test(lines[i - 1]);
-    const money = /(?<![\d.,/:-])(\d{1,3}(?:,\s*\d{3})+|\d{1,7})\s*\.\s*(\d{2})(?![\d./:-])/g;
+    const money = /(?<![\dA-Za-z.,/:-])(\d{1,3}(?:,\s*\d{3})+|\d{1,7})\s*\.\s*(\d{2})(?![\dA-Za-z.,/:-])/g;
     for (const m of line.matchAll(money)) {
       // Dot-formatted time and numeric dates must not become expenses.
       if (/น\./.test(line) && !labelled && !currency.test(line)) continue;
@@ -221,7 +221,7 @@ export function canImportSlip(item) {
 
 // Read TLV lengths instead of matching accidental "0103"/"02" substrings in IDs or URLs.
 export function parseSlipVerifyQR(raw) {
-  if (typeof raw !== 'string' || !raw || raw.length > 4096) return null;
+  if (typeof raw !== 'string' || !raw || raw.length > 4096 || raw.startsWith('000201')) return null;
   function readTLV(value) {
     const tags = new Map();
     for (let offset = 0; offset < value.length;) {

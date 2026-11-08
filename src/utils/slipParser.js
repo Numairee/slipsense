@@ -15,7 +15,7 @@ import { parseSlipVerifyQR } from './slipFields.js';
  * Analyze dominant color of the top header area of the slip
  */
 export function analyzeBankColor(ctx, width, height) {
-  const headerHeight = Math.max(10, Math.floor(height * 0.18));
+  const headerHeight = Math.min(height, Math.max(1, Math.floor(height * 0.18)));
   const imgData = ctx.getImageData(0, 0, width, headerHeight);
   const data = imgData.data;
 
@@ -84,7 +84,7 @@ export async function parseSlipImage(file, merchantRules = {}, categories = []) 
       img.onload = async () => {
         try {
           const canvas = document.createElement('canvas');
-          const maxDim = 1280;
+          const maxDim = 2000;
           let width = img.width;
           let height = img.height;
 
@@ -219,7 +219,7 @@ export async function parseSlipImage(file, merchantRules = {}, categories = []) 
               slipThumbnail: thumbnail,
               isManual: false,
               rawFilename: file.name,
-              ocrConfidence: reviewWarnings.length ? 'medium' : 'high',
+              ocrConfidence: reviewWarnings.length ? 'low' : 'medium',
               reviewWarnings,
               rawOcrText
             }

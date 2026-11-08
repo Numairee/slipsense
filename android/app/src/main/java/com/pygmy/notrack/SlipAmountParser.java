@@ -7,8 +7,8 @@ import java.util.regex.Pattern;
 public final class SlipAmountParser {
     private static final Pattern LABEL = Pattern.compile("จำนวนเงิน|ยอดเงิน|ยอดโอน|amount", Pattern.CASE_INSENSITIVE);
     private static final Pattern CURRENCY = Pattern.compile("บาท|thb|baht|฿", Pattern.CASE_INSENSITIVE);
-    private static final Pattern EXCLUDED = Pattern.compile("ค่าธรรมเนียม|fee|ยอดคงเหลือ|balance|เลขที่|อ้างอิง|reference|transaction\\s*id|บัญชี|account", Pattern.CASE_INSENSITIVE);
-    private static final Pattern DECIMAL = Pattern.compile("(?<![0-9.,/:-])([0-9]{1,3}(?:,\\s*[0-9]{3})+|[0-9]{1,7})\\s*\\.\\s*([0-9]{2})(?![0-9./:-])");
+    private static final Pattern EXCLUDED = Pattern.compile("ค่าธรรมเนียม|ค่าบริการ|เวลา|\\btime\\b|fee|ยอดคงเหลือ|balance|เลขที่|อ้างอิง|reference|transaction\\s*id|บัญชี|account", Pattern.CASE_INSENSITIVE);
+    private static final Pattern DECIMAL = Pattern.compile("(?<![0-9A-Za-z.,/:-])([0-9]{1,3}(?:,\\s*[0-9]{3})+|[0-9]{1,7})\\s*\\.\\s*([0-9]{2})(?![0-9A-Za-z.,/:-])");
     private static final Pattern INTEGER = Pattern.compile("^(?:.*?(?:จำนวนเงิน|ยอดเงิน|ยอดโอน|amount|฿|THB)[:：\\s]*)?([0-9]{1,3}(?:,[0-9]{3})+|[0-9]{1,7})(?:\\s*(?:บาท|THB|baht|฿))?\\s*$", Pattern.CASE_INSENSITIVE);
 
     private SlipAmountParser() {}
@@ -19,7 +19,7 @@ public final class SlipAmountParser {
         for (char ch : text.toCharArray()) {
             normalized.append(ch >= '๐' && ch <= '๙' ? (char) ('0' + ch - '๐') : ch);
         }
-        String[] lines = normalized.toString().split("\n");
+        String[] lines = normalized.toString().replaceAll("([\\u0e00-\\u0e7f])[ \\t]+(?=[\\u0e00-\\u0e7f])", "$1").split("\n");
         int bestScore = 0;
         double best = 0;
         boolean ambiguous = false;

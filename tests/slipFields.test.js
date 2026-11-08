@@ -71,3 +71,9 @@ test('whole-baht shorthand and fullwidth digits', () => {
   assert.equal(parse('จำนวนเงิน 125.- บาท').amount, 125);
   assert.equal(parse('Amount １２５.５０ THB').amount, 125.5);
 });
+
+
+test('payment request prefix cannot become a completed-slip QR', () => {
+  const flat = '01030040212AB1234567890';
+  assert.equal(parseSlipVerifyQR('000201' + flat), null);
+});

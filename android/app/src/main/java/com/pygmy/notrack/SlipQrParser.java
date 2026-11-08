@@ -24,7 +24,7 @@ public final class SlipQrParser {
 
     // Returns bank BOT code and reference, or null when either field is missing.
     public static String[] parse(String raw) {
-        if (raw == null || raw.isEmpty() || raw.length() > 4096) return null;
+        if (raw == null || raw.isEmpty() || raw.length() > 4096 || raw.startsWith("000201")) return null;
         Map<String, String> values = tags(raw);
         if (values == null) return null;
         Map<String, String> nested = values.containsKey("00") ? tags(values.get("00")) : null;

@@ -1,9 +1,10 @@
 import React, { useState, useRef } from 'react';
 import {
   ShieldCheck, Download, Upload, Trash2, Tag, BookOpen,
-  Info, ExternalLink, RefreshCw, CheckCircle2, AlertTriangle, Sparkles, Zap
+  Info, ExternalLink, RefreshCw, CheckCircle2, AlertTriangle, Zap, Globe, DollarSign
 } from 'lucide-react';
 import { sound } from '../utils/sound';
+import { useI18n } from '../i18n/index.jsx';
 
 export default function SettingsView({
   categories,
@@ -18,9 +19,21 @@ export default function SettingsView({
   onClearAndRescan,
   onClearMerchantRules,
 }) {
+  const { t, language, setLanguage, displayCurrency, setDisplayCurrency, supportedLanguages } = useI18n();
   const [showConfirmClear, setShowConfirmClear] = useState(false);
   const [importStatus, setImportStatus] = useState(null);
   const fileInputRef = useRef(null);
+
+  const currencyOptions = [
+    { code: 'AUTO', label: t('autoDetectCurrency') },
+    { code: 'USD', label: 'USD ($) - US Dollar' },
+    { code: 'EUR', label: 'EUR (€) - Euro' },
+    { code: 'GBP', label: 'GBP (£) - British Pound' },
+    { code: 'JPY', label: 'JPY (¥) - Japanese Yen' },
+    { code: 'CNY', label: 'CNY (¥) - Chinese Yuan' },
+    { code: 'THB', label: 'THB (฿) - Thai Baht' },
+    { code: 'SGD', label: 'SGD (S$) - Singapore Dollar' },
+  ];
 
   const handleFileChange = (e) => {
     const file = e.target.files?.[0];
@@ -33,22 +46,20 @@ export default function SettingsView({
         const success = onImportBackup(text);
         if (success) {
           sound.playSuccess();
-          setImportStatus({ success: true, message: 'นำเข้าข้อมูลสำรองเรียบร้อยแล้ว!' });
+          setImportStatus({ success: true, message: t('backupImported') });
         } else {
-          setImportStatus({ success: false, message: 'ไฟล์ข้อมูลสำรองไม่ถูกต้อง' });
+          setImportStatus({ success: false, message: t('invalidBackupFile') });
         }
       } catch (err) {
-        setImportStatus({ success: false, message: 'เกิดข้อผิดพลาดในการอ่านไฟล์' });
+        setImportStatus({ success: false, message: t('invalidBackupFile') });
       }
     };
     reader.readAsText(file);
   };
 
-  const merchantRulesList = Object.entries(merchantRules || {});
-
   return (
     <div className="space-y-4 pb-24 animate-fade-in">
-      {/* Privacy First (No-Track) Showcase Card */}
+      {/* Privacy First Showcase Card */}
       <div className="rounded-3xl bg-gradient-to-br from-neutral-900 via-neutral-900 to-neutral-800 border border-neutral-700/60 text-white p-5 shadow-xl">
         <div className="flex items-center gap-2 mb-2">
           <div className="w-8 h-8 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center">
@@ -56,48 +67,113 @@ export default function SettingsView({
           </div>
           <div>
             <h3 className="font-extrabold text-sm tracking-tight text-white">
-              SlipSense 100% On-Device Privacy
+              SlipSense {t('privacyHeading')}
             </h3>
             <span className="text-[11px] text-cyan-300 font-medium">
-              สแกนและประมวลผลบนเครื่องเท่านั้น ปลอดภัยระดับสูงสุด
+              {t('privacySubheading')}
             </span>
           </div>
         </div>
 
         <p className="text-xs text-neutral-300 leading-relaxed mb-3">
-          ข้อมูลสลิปและรายการธุรกรรมทั้งหมดถูกอ่านและจัดเก็บในหน่วยความจำของเครื่องคุณเท่านั้น ไม่มีการส่งรูปภาพหรือตัวเลขออกภายนอก ไม่มีเซิร์ฟเวอร์ และไม่มีระบบติดตามตัวตน
+          {t('privacyBody')}
         </p>
 
         <div className="grid grid-cols-3 gap-2 pt-2 border-t border-white/10 text-center text-[10px]">
           <div className="bg-white/5 rounded-xl p-2 border border-white/5">
-            <span className="font-bold block text-white">🔒 100% Offline</span>
-            <span className="text-neutral-400">ทำงานโดยไม่ต้องต่อเน็ต</span>
+            <span className="font-bold block text-white">{t('badgeOffline')}</span>
+            <span className="text-neutral-400">{t('badgeOfflineDesc')}</span>
           </div>
           <div className="bg-white/5 rounded-xl p-2 border border-white/5">
-            <span className="font-bold block text-white">🚫 No Cloud</span>
-            <span className="text-neutral-400">ไม่มีฐานข้อมูลภายนอก</span>
+            <span className="font-bold block text-white">{t('badgeNoCloud')}</span>
+            <span className="text-neutral-400">{t('badgeNoCloudDesc')}</span>
           </div>
           <div className="bg-white/5 rounded-xl p-2 border border-white/5">
-            <span className="font-bold block text-white">🛡️ Safe Gallery</span>
-            <span className="text-neutral-400">ไม่ลบรูปจริงในมือถือ</span>
+            <span className="font-bold block text-white">{t('badgeSafeGallery')}</span>
+            <span className="text-neutral-400">{t('badgeSafeGalleryDesc')}</span>
           </div>
         </div>
+      </div>
+
+      {/* Language Selection Card */}
+      <div className="bg-neutral-900 rounded-3xl p-4 border border-neutral-800 shadow-md space-y-3">
+        <div className="flex items-center gap-2">
+          <Globe className="w-4 h-4 text-cyan-400" />
+          <h4 className="font-extrabold text-xs text-neutral-400 uppercase tracking-wide">
+            {t('languageSection')}
+          </h4>
+        </div>
+        <p className="text-[11px] text-neutral-400">
+          {t('languageDesc')}
+        </p>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {supportedLanguages.map((l) => {
+            const isSelected = language === l.code;
+            return (
+              <button
+                key={l.code}
+                onClick={() => {
+                  sound.playPop();
+                  setLanguage(l.code);
+                }}
+                className={`p-2.5 rounded-2xl border text-left transition-all flex items-center gap-2.5 ${
+                  isSelected
+                    ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300 font-bold shadow-md shadow-cyan-500/10'
+                    : 'bg-neutral-800/60 border-neutral-700/60 text-neutral-300 hover:bg-neutral-800'
+                }`}
+              >
+                <span className="text-xl">{l.flag}</span>
+                <div>
+                  <div className="text-xs font-bold leading-tight">{l.nativeName}</div>
+                  <div className="text-[10px] text-neutral-400 font-medium">{l.name}</div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Currency Preference Card */}
+      <div className="bg-neutral-900 rounded-3xl p-4 border border-neutral-800 shadow-md space-y-3">
+        <div className="flex items-center gap-2">
+          <DollarSign className="w-4 h-4 text-emerald-400" />
+          <h4 className="font-extrabold text-xs text-neutral-400 uppercase tracking-wide">
+            {t('currencySection')}
+          </h4>
+        </div>
+        <p className="text-[11px] text-neutral-400">
+          {t('currencyDesc')}
+        </p>
+        <select
+          value={displayCurrency}
+          onChange={(e) => {
+            sound.playPop();
+            setDisplayCurrency(e.target.value);
+          }}
+          className="w-full bg-neutral-800 border border-neutral-700 rounded-2xl p-2.5 text-xs text-white focus:outline-none focus:border-cyan-500"
+        >
+          {currencyOptions.map((opt) => (
+            <option key={opt.code} value={opt.code}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/* Data Export & Backup Section */}
       <div className="bg-neutral-900 rounded-3xl p-4 border border-neutral-800 shadow-md space-y-3">
         <h4 className="font-extrabold text-xs text-neutral-400 uppercase tracking-wide">
-          การจัดการข้อมูล & สำรองไฟล์
+          {t('dataManagement')}
         </h4>
 
         {/* Export CSV */}
         <div className="flex items-center justify-between p-3 rounded-2xl bg-neutral-800/80 border border-neutral-700/60">
           <div>
             <h5 className="font-bold text-xs text-white">
-              ส่งออกไฟล์ CSV (สำหรับ Excel / AI)
+              {t('exportCsvLabel')}
             </h5>
             <p className="text-[11px] text-neutral-400">
-              UTF-8 with BOM เปิดใน Excel หรือ Sheets ได้ทันทีโดยสระไม่เพี้ยน
+              {t('exportCsvNote')}
             </p>
           </div>
           <button
@@ -108,7 +184,7 @@ export default function SettingsView({
             className="shrink-0 px-3.5 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-600 active:scale-95 text-white font-bold text-xs shadow-md shadow-cyan-500/20 transition-all flex items-center gap-1.5"
           >
             <Download className="w-3.5 h-3.5" />
-            ส่งออก CSV
+            <span>CSV</span>
           </button>
         </div>
 
@@ -122,8 +198,8 @@ export default function SettingsView({
             className="p-3 rounded-2xl bg-neutral-800/60 border border-neutral-700/60 hover:bg-neutral-800 active:scale-98 transition-all flex flex-col items-center justify-center text-center text-neutral-200"
           >
             <Download className="w-5 h-5 text-amber-400 mb-1" />
-            <span className="font-bold text-xs">สำรองข้อมูล (JSON)</span>
-            <span className="text-[10px] text-neutral-400">บันทึกทุกรายการ</span>
+            <span className="font-bold text-xs">{t('exportBackupLabel')}</span>
+            <span className="text-[10px] text-neutral-400">{t('exportBackupNote')}</span>
           </button>
 
           <input
@@ -142,8 +218,8 @@ export default function SettingsView({
             className="p-3 rounded-2xl bg-neutral-800/60 border border-neutral-700/60 hover:bg-neutral-800 active:scale-98 transition-all flex flex-col items-center justify-center text-center text-neutral-200"
           >
             <Upload className="w-5 h-5 text-cyan-400 mb-1" />
-            <span className="font-bold text-xs">กู้คืนข้อมูล (Restore)</span>
-            <span className="text-[10px] text-neutral-400">เลือกไฟล์ JSON</span>
+            <span className="font-bold text-xs">{t('importBackupLabel')}</span>
+            <span className="text-[10px] text-neutral-400">{t('importBackupNote')}</span>
           </button>
         </div>
 
@@ -160,18 +236,16 @@ export default function SettingsView({
       {/* Preferences Section */}
       <div className="bg-neutral-900 rounded-3xl p-4 border border-neutral-800 shadow-md space-y-3">
         <h4 className="font-extrabold text-xs text-neutral-400 uppercase tracking-wide">
-          การทำงานของระบบ
+          {t('autoScanStartup')}
         </h4>
 
         <div className="flex items-center justify-between p-3 rounded-2xl bg-neutral-800/80 border border-neutral-700/60">
           <div>
             <h5 className="font-bold text-xs text-white">
-              สแกนสลิปอัตโนมัติเมื่อเปิดแอป
+              {t('autoScanStartup')}
             </h5>
             <p className="text-[11px] text-neutral-400">
-              {autoScanOnStartup
-                ? 'เปิดใช้งาน: ค้นหาสลิปใหม่ทันทีที่เข้าแอป'
-                : 'ปิดใช้งาน: สแกนเฉพาะเมื่อกดปุ่มบนหน้าแรกเท่านั้น (แนะนำ)'}
+              {t('autoScanStartupDesc')}
             </p>
           </div>
           <button
@@ -189,17 +263,17 @@ export default function SettingsView({
         </div>
       </div>
 
-      {/* Danger Zone: Clear App / Reset Data */}
+      {/* Reset & Clear Data Section */}
       <div className="bg-rose-950/30 rounded-3xl p-4 border border-rose-800/60 shadow-md space-y-2.5">
         <div className="flex items-center justify-between">
           <h4 className="font-extrabold text-xs text-rose-400 uppercase tracking-wide flex items-center gap-1.5">
             <Trash2 className="w-4 h-4 text-rose-400" />
-            <span>ล้างข้อมูลแอป (Reset App)</span>
+            <span>{t('clearAllData')}</span>
           </h4>
         </div>
 
         <p className="text-xs text-rose-200/70 leading-relaxed">
-          ลบเฉพาะรายการสลิปและข้อมูลที่บันทึกไว้ในตัวแอป (รูปภาพสลิปจริงในแกลเลอรีมือถือของคุณจะไม่ถูกลบหรือแตะต้องอย่างแน่นอน 100%)
+          {t('clearAllDataDesc')}
         </p>
 
         <button
@@ -214,20 +288,20 @@ export default function SettingsView({
           className="w-full py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-98 text-white text-xs font-bold transition-all shadow-md shadow-rose-600/30 flex items-center justify-center gap-1.5"
         >
           <Trash2 className="w-4 h-4" />
-          <span>ล้างแอปทั้งหมด (Reset App)</span>
+          <span>{t('clearAllData')}</span>
         </button>
 
         {showConfirmClear && (
           <div className="p-3 bg-neutral-900 rounded-2xl border border-rose-500/50 flex flex-col gap-2 mt-2 animate-fade-in">
             <span className="text-xs font-bold text-rose-300">
-              ⚠️ แน่ใจหรือไม่? ข้อมูลรายจ่ายทั้งหมดในแอปจะถูกลบ
+              ⚠️ {t('clearAllDataDesc')}
             </span>
             <div className="flex gap-2">
               <button
                 onClick={() => setShowConfirmClear(false)}
                 className="flex-1 py-1.5 text-xs text-neutral-300 bg-neutral-800 hover:bg-neutral-700 rounded-xl"
               >
-                ยกเลิก
+                {t('cancel')}
               </button>
               <button
                 onClick={() => {
@@ -237,7 +311,7 @@ export default function SettingsView({
                 }}
                 className="flex-1 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl"
               >
-                ยืนยันล้างทั้งหมด
+                {t('save')}
               </button>
             </div>
           </div>
@@ -247,13 +321,13 @@ export default function SettingsView({
       {/* About SlipSense */}
       <div className="text-center py-4 text-xs text-neutral-500 space-y-1">
         <p className="font-extrabold text-neutral-300">
-          SlipSense v2.0.0 (Smart Slip & Wealth Intelligence)
+          SlipSense v2.2.0 ({t('brandTagline')})
         </p>
         <p className="text-[11px] text-neutral-400">
-          On-Device Machine Learning & Privacy-First Architecture
+          {t('aboutDescription')}
         </p>
         <p className="text-[10px] text-neutral-500">
-          รองรับสลิปธนาคารไทยทุกแห่ง • ปลอดภัย 100% ไม่ส่งข้อมูลออกนอกเครื่อง
+          {t('privacySubheading')}
         </p>
       </div>
     </div>

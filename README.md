@@ -1,123 +1,141 @@
-# Pygmy: No-Track Tracker (Android 🐐)
-> **ปิ๊กมี่: จดรายจ่ายแบบไม่จด สำหรับ Android**  
-> บันทึกรายจ่ายจากสลิปธนาคารอัตโนมัติ ทำงานแบบ On-Device บนเครื่องโดยไม่ต้องต่ออินเทอร์เน็ต
+# SlipSense
+
+> **Private on-device smart slip & receipt scanner for Android and the Web.**  
+> Automatically extract transactions from bank slips and digital payment receipts worldwide without cloud servers or tracking.
+
+[![Validate slip parsing and web build](https://github.com/Numairee/slipsense/actions/workflows/validate.yml/badge.svg)](https://github.com/Numairee/slipsense/actions/workflows/validate.yml)
+[![Build & Release SlipSense Android APK](https://github.com/Numairee/slipsense/actions/workflows/build-apk.yml/badge.svg)](https://github.com/Numairee/slipsense/actions/workflows/build-apk.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ---
 
-## ฟีเจอร์หลัก
+## Overview
 
-1. **อ่านสลิปธนาคารไทยอัตโนมัติ (Thai Bank Slip Scanner):**
-   - รองรับการนำเข้าสลิปเดี่ยวและแบบกลุ่ม (Batch Import) จากอัลบั้มภาพ หรือถ่ายรูป
-   - ตรวจจับธนาคาร วันที่ เวลา จำนวนเงิน ผู้รับเงิน ผู้โอน และรหัสอ้างอิง
-   - รองรับสลิปธนาคารและ e-Wallet ในไทย:
-     - 💚 **K PLUS** (กสิกรไทย)
-     - 💜 **SCB EASY** (ไทยพาณิชย์)
-     - 🩵 **Krungthai NEXT** (กรุงไทย)
-     - 💛 **Krungsri KMA** (กรุงศรีอยุธยา)
-     - 💙 **Bangkok Bank** (ธนาคารกรุงเทพ)
-     - 💙🧡 **ttb touch** (ทีเอ็มบีธนชาต)
-     - 🩵 **MAKE by KBank**
-     - 🩷 **Dime!**
-     - 🩵 **Kept by krungsri**
-     - 🧡 **TrueMoney Wallet**
-     - 🩷 **MyMo** (ธนาคารออมสิน)
+SlipSense scans and indexes bank transfer slips, digital wallet confirmations, and payment receipts directly on your device. All image parsing and text recognition run locally through client-side OCR and native platform bridges. Your photos, transaction amounts, and financial records never leave your phone.
 
-2. **ความเป็นส่วนตัว (No-Track Privacy):**
-   - ประมวลผลแบบ **On-Device** ข้อมูลและรูปสลิปอยู่ในเครื่องของคุณเท่านั้น ไม่ส่งออกเซิร์ฟเวอร์ภายนอก
-   - ทำงานแบบออฟไลน์ได้โดยไม่ต้องต่อเน็ต
-   - ไม่มีเซิร์ฟเวอร์กลาง และไม่มีระบบเก็บข้อมูลสถิติผู้ใช้ (Analytics)
-   - ใช้งานได้ฟรี ไม่มีโฆษณา
+### Key Capabilities
 
-3. **น้องแพะปิ๊กมี่ (Feed the Goat 🐐):**
-   - มาสคอตโต้ตอบได้ มีแอนิเมชันเคี้ยวสลิปและกะพริบตา
-   - เอฟเฟกต์เสียงสังเคราะห์ผ่าน Web Audio API
-   - ระบบนับสถิติ Streak การบันทึกต่อเนื่องประจำวัน และระดับความอิ่มท้อง (Hunger Bar)
-   - หน้าห้องของน้องปิ๊กมี่ (Goat Room) สำหรับให้อาหารว่างและดูคำแนะนำการเงิน
+1. **Global Slip & Receipt OCR:**
+   - Multi-currency recognition: USD (`$`), EUR (`€`), GBP (`£`), JPY (`¥`), CNY (`¥`), THB (`฿`), SGD (`S$`), MYR (`RM`), AUD (`A$`), CAD (`C$`), and others.
+   - Worldwide financial institutions and digital wallets:
+     - **Global FinTech:** PayPal, Wise, Revolut, Stripe, Apple Pay, Google Pay, Venmo, Cash App, Zelle, WeChat Pay, Alipay, LINE Pay.
+     - **International Banks:** JPMorgan Chase, Bank of America, Wells Fargo, Citibank, HSBC, Barclays, Santander, BBVA, DBS, and generic payment receipts.
+     - **Thai Banking:** K PLUS, SCB EASY, Krungthai NEXT, Krungsri KMA, Bangkok Bank, ttb touch, MAKE by KBank, Dime!, Kept, TrueMoney, MyMo (GSB).
+   - Extracts amount, date, time, payee/merchant, sender, reference code, and payment method across Latin, Thai, Chinese, and Japanese scripts.
+   - Bank of Thailand / ITMX Mini-QR TLV verification.
 
-4. **สรุปภาพรวมและสถิติการเงิน (Analytics & Insights):**
-   - ยอดรวมรายจ่ายเดือนนี้และค่าเฉลี่ยรายจ่ายต่อวัน
-   - กราฟแท่งการใช้จ่ายรายวัน (วันที่ 1 ถึงสิ้นเดือน)
-   - แผนภูมิแจกแจงตามหมวดหมู่ค่าใช้จ่าย
-   - สรุปสัดส่วนการจ่ายแยกตามธนาคารหรือบัญชี
-   - สรุป 10 อันดับร้านค้าหรือผู้รับเงินที่มียอดจ่ายสูงสุด
+2. **Multi-Language Interface (i18n):**
+   - 🇺🇸 English
+   - 🇹🇭 ภาษาไทย (Thai)
+   - 🇨🇳 简体中文 (Simplified Chinese)
+   - 🇯🇵 日本語 (Japanese)
+   - 🇪🇸 Español (Spanish)
+   - Real-time language switching with persistent preference storage.
 
-5. **ระบบจดจำร้านค้า (Merchant Rules):**
-   - เมื่อกำหนดหมวดหมู่ของร้านค้า ระบบจะจดจำไว้และจัดหมวดหมู่อัตโนมัติในครั้งถัดไป
+3. **100% On-Device Privacy (No-Track):**
+   - Fully functional offline without an internet connection.
+   - Zero telemetry, analytics, or external trackers.
+   - Gallery safety guarantee: device photos are only read for OCR parsing and are never altered, moved, or deleted.
 
-6. **ส่งออกข้อมูล (CSV Export):**
-   - ส่งออกข้อมูลเป็นไฟล์ CSV เข้ารหัส UTF-8 with BOM เพื่อเปิดใน Microsoft Excel หรือ Google Sheets ได้ทันทีโดยสระภาษาไทยไม่เพี้ยน
+4. **Financial Analytics & Budgeting:**
+   - Monthly burn rate and daily average metrics.
+   - Interactive daily expense timeline and category breakdown charts.
+   - Top merchant expense ranking and payment method distribution.
+   - Category budget tracking with visual limit indicators.
+
+5. **Merchant Memory Rules:**
+   - Automatically remembers user-assigned categories for frequent payees and shops.
+
+6. **Export & Portability:**
+   - CSV export with UTF-8 BOM encoding for direct import into Microsoft Excel, Apple Numbers, and Google Sheets.
+   - Full JSON database backup and restore.
 
 ---
 
-## วิธีใช้งานบน Android
+## Getting Started
 
-### วิธีที่ 1: ติดตั้งผ่านเบราว์เซอร์ (PWA)
-รองรับ Progressive Web App (PWA) พร้อม Service Worker สำหรับใช้งานออฟไลน์:
+### Prerequisites
+- Node.js 20 or higher
+- npm 10 or higher
 
-1. รันเซิร์ฟเวอร์ในโฟลเดอร์โปรเจกต์:
-   ```bash
-   npm run start
-   ```
-2. เปิดเบราว์เซอร์ Chrome บนมือถือ Android แล้วเข้าไปยัง IP ของเครื่องคอมพิวเตอร์ในวง Wi-Fi เดียวกัน (เช่น `http://192.168.1.XX:5173`)
-3. แตะที่เมนูจุด 3 จุด (⋮) มุมขวาบนของ Chrome แล้วเลือก **"ติดตั้งแอป" (Install app)** หรือ **"เพิ่มลงในหน้าจอหลัก" (Add to Home screen)**
-4. ไอคอนน้องแพะปิ๊กมี่ 🐐 จะปรากฏบนหน้าจอหลัก เปิดใช้งานแบบเต็มจอและทำงานแบบออฟไลน์ได้ทันที
-
----
-
-### วิธีที่ 2: บิลด์ไฟล์ APK (Native Android)
-โฟลเดอร์ `android/` เป็น Android Native Project (Capacitor):
+### Installation & Development
 
 ```bash
-# 1. บิลด์เว็บและซิงก์เข้า Android
+# Clone the repository
+git clone https://github.com/Numairee/slipsense.git
+cd slipsense
+
+# Install dependencies
+npm install
+
+# Run automated test suite (58 regression tests)
+npm test
+
+# Verify text style contract
+npm run unslop
+
+# Start local development server
+npm run dev
+
+# Build production bundle
+npm run build
+```
+
+---
+
+## Android Native Build
+
+The native Android application is packaged with [Capacitor](https://capacitorjs.com/):
+
+```bash
+# 1. Build web distribution and sync to Android
 npm run android:sync
 
-# 2. เปิดโปรเจกต์ใน Android Studio
+# 2. Open project in Android Studio
 npm run android:open
 ```
 
-ใน Android Studio:
-- ไปที่เมนู **Build > Build Bundle(s) / APK(s) > Build APK(s)** เพื่อสร้างไฟล์ `.apk` สำหรับติดตั้งบนอุปกรณ์ Android
+In Android Studio:
+- Select **Build > Build Bundle(s) / APK(s) > Build APK(s)** to generate `app-release.apk`.
+- Alternatively, automated APK artifacts are built by GitHub Actions on every release.
 
 ---
 
-## โครงสร้างโปรเจกต์ (Project Structure)
+## Project Structure
 
 ```text
-pygmy-android/
-├── android/                   # Android Studio Native Project (Gradle / Manifest)
-├── public/
-│   ├── favicon.svg            # ไอคอนน้องแพะ Pygmy Goat
-│   ├── manifest.json          # PWA Web App Manifest สำหรับ Android
-│   └── sw.js                  # Service Worker แคชไฟล์ออฟไลน์
+slipsense/
+├── .github/workflows/          # CI validation and automated APK release workflows
+├── android/                    # Capacitor Android Studio project (Java / Gradle)
+├── public/                     # Static web assets, manifest, and icons
 ├── src/
-│   ├── components/
-│   │   ├── Header.jsx         # แถบ Header, โลโก้, ป้าย No-Track, เลือกเดือน
-│   │   ├── Navbar.jsx         # Bottom Tab Bar 5 ปุ่ม
-│   │   ├── PygmyGoat.jsx      # ตัวการ์ตูนน้องแพะ SVG โต้ตอบได้
-│   │   ├── GoatWidget.jsx     # การ์ดน้องปิ๊กมี่หน้าแรก (Streak + เสียง + คำพูด)
-│   │   ├── SummaryCards.jsx   # การ์ดยอดรวมเดือนนี้ + ค่าเฉลี่ยต่อวัน
-│   │   ├── TransactionItem.jsx# การ์ดแสดงรายการสลิป (โลโก้ธนาคาร, จำนวนเงิน)
-│   │   ├── ScanModal.jsx      # โมดัลสแกนสลิป รองรับเลือกรูปหลายใบ
-│   │   ├── ManualAddModal.jsx # โมดัลจดเงินสด
-│   │   ├── SlipDetailModal.jsx# ใบเสร็จรายละเอียดสลิป ปรับหมวดหมู่ ลบรายการ
-│   │   └── InstallPrompt.jsx  # แบนเนอร์แนะนำการติดตั้งลง Android
-│   ├── data/
-│   │   ├── banks.js           # ข้อมูลและสีธนาคารไทย
-│   │   └── defaultCategories.js # หมวดหมู่ค่าใช้จ่ายและคำค้นจับคู่อัตโนมัติ
-│   ├── utils/
-│   │   ├── slipParser.js      # On-Device OCR & Slip QR parser
-│   │   ├── storage.js         # ระบบจัดเก็บข้อมูล LocalStorage ออฟไลน์
-│   │   ├── sound.js           # Web Audio API สร้างเสียงแพะ & เสียงเคี้ยว
-│   │   └── csvExporter.js     # ส่งออก CSV ภาษาไทย UTF-8 BOM
-│   ├── views/
-│   │   ├── HomeView.jsx       # หน้าหลัก สรุปภาพรวมและรายการล่าสุด
-│   │   ├── StatsView.jsx      # หน้ารายงานสถิติ กราฟรายวัน สัดส่วนหมวดหมู่
-│   │   ├── HistoryView.jsx    # หน้าประวัติรายการ ค้นหา และกรองตามหมวด/ธนาคาร
-│   │   ├── GoatView.jsx       # ห้องน้องปิ๊กมี่ เมนูป้อนอาหารว่าง & สถิติ
-│   │   └── SettingsView.jsx   # ตั้งค่า นำเข้า-ส่งออก สำรองไฟล์ ล้างข้อมูล
-│   ├── App.jsx
-│   └── main.jsx
-├── capacitor.config.json
+│   ├── components/             # Reusable UI components (Modals, Headers, Cards)
+│   ├── data/                   # Bank definitions and expense categories
+│   ├── i18n/                   # Multi-language translations (EN, TH, ZH, JA, ES)
+│   ├── utils/                  # OCR engine, slip field extractors, and storage
+│   ├── views/                  # Primary screen views (Home, Analytics, Budgets, History, Settings)
+│   ├── App.jsx                 # Application state coordinator
+│   └── main.jsx                # Application root entry
+├── tests/                      # Automated test suite (amount, dates, QR, global slips)
+├── capacitor.config.json       # Capacitor configuration
 ├── package.json
 └── vite.config.js
 ```
+
+---
+
+## Automated Test Coverage
+
+The test suite runs with Node's native test runner (`node --test tests/*.test.js`):
+- Multi-currency amount extraction (standard decimals, Thai digits, fullwidth characters, edge bounds).
+- Global digital wallets (PayPal, Wise, Revolut, Alipay, Santander, POS receipts).
+- Date format normalization (ISO, slash dates, Thai/English/Spanish month names, East Asian dates).
+- Reference code extraction across multi-lingual receipt layouts.
+- Mini-QR TLV tag length and structure parsing.
+- Duplicate transaction prevention and storage consistency.
+
+---
+
+## License
+
+This project is licensed under the MIT License.

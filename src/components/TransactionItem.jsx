@@ -2,17 +2,12 @@ import React from 'react';
 import { getBankById } from '../data/banks';
 import { getCategoryById } from '../data/defaultCategories';
 import { Image as ImageIcon } from 'lucide-react';
+import { useI18n } from '../i18n/index.jsx';
 
 export default function TransactionItem({ transaction, categories, onClick }) {
+  const { formatAmount } = useI18n();
   const bank = getBankById(transaction.bankId);
   const category = getCategoryById(categories, transaction.categoryId);
-
-  const formatBaht = (num) => {
-    return Number(num || 0).toLocaleString('th-TH', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    });
-  };
 
   return (
     <div
@@ -56,7 +51,7 @@ export default function TransactionItem({ transaction, categories, onClick }) {
                 borderColor: `${bank.color}40`
               }}
             >
-              {bank.name}
+              {bank.shortName || bank.name}
             </span>
 
             <span className="font-mono text-[11px] text-neutral-400">
@@ -85,7 +80,7 @@ export default function TransactionItem({ transaction, categories, onClick }) {
       {/* Right: Amount & Bank Name */}
       <div className="text-right shrink-0 pl-3">
         <div className="font-mono font-bold text-xs sm:text-sm text-white tracking-tight">
-          -฿{formatBaht(transaction.amount)}
+          -{formatAmount(transaction.amount, transaction.currency)}
         </div>
         <div
           className="text-[10px] font-extrabold mt-0.5"

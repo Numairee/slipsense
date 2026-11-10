@@ -1,11 +1,11 @@
 import React, { useState, useRef } from 'react';
 import { X, UploadCloud, Camera, Image, Sparkles, Loader2, Plus, ArrowRight } from 'lucide-react';
 import { parseSlipImage, SAMPLE_TEST_SLIPS } from '../utils/slipParser';
-import { getBankById } from '../data/banks';
+import { getBankById, BANK_LIST } from '../data/banks';
 import { sound } from '../utils/sound';
 import { isDuplicateSlip, canImportSlip } from '../utils/slipFields.js';
-import { BANK_LIST } from '../data/banks';
 import confetti from 'canvas-confetti';
+import { useI18n } from '../i18n/index.jsx';
 
 export default function ScanModal({
   isOpen,
@@ -16,7 +16,7 @@ export default function ScanModal({
   initialItems = [],
   onImportBatch
 }) {
-
+  const { t, formatAmount } = useI18n();
   const [isProcessing, setIsProcessing] = useState(false);
   const [extractedItems, setExtractedItems] = useState(initialItems);
   const [dragOver, setDragOver] = useState(false);
@@ -103,92 +103,77 @@ export default function ScanModal({
     });
   };
 
+  const handleUpdateField = (idx, field, value) => {
+    setExtractedItems(prev => {
+      const copy = [...prev];
+      const nextItem = { ...copy[idx], [field]: field === 'amount' ? (value === '' ? '' : Number(value)) : value };
+      nextItem.isDuplicate = checkIsDuplicate(nextItem);
+      copy[idx] = nextItem;
+      return copy;
+    });
+  };
+
   const handleRemoveItem = (idx) => {
     sound.playPop();
     setExtractedItems(prev => prev.filter((_, i) => i !== idx));
   };
 
-  const reviewedItems = extractedItems.map((item, idx) => ({
+  const reviewedItems = extractedItems.map(item => ({
     ...item,
-    isDuplicate: isDuplicateSlip(item, [...existingTransactions, ...extractedItems.slice(0, idx)])
+    isDuplicate: checkIsDuplicate(item)
   }));
-  const itemsToImport = reviewedItems.filter(item =>
-    !(skipDuplicates && item.isDuplicate) && canImportSlip(item));
-  const duplicateItemsCount = reviewedItems.filter(item => item.isDuplicate).length;
 
-  const handleUpdateField = (idx, field, value) => {
-    setExtractedItems(prev => prev.map((item, i) => i === idx ? { ...item, [field]: value } : item));
-  };
+  const duplicateItemsCount = reviewedItems.filter(i => i.isDuplicate).length;
 
-  const handleConfirmImport = async () => {
-    if (!itemsToImport.length || isProcessing) return;
+  const itemsToImport = reviewedItems.filter(item => {
+    if (skipDuplicates && item.isDuplicate) return false;
+    return canImportSlip(item);
+  });
+
+  const handleConfirmImport = () => {
+    if (!itemsToImport.length) return;
+    sound.playSuccess();
     try {
-      setError('');
-      await onImportBatch(itemsToImport.map(({ isDuplicate: _isDuplicate, ...item }) => ({ ...item, amount: Number(item.amount) })));
-      sound.playCrunch();
-      confetti({ particleCount: 50, spread: 80, origin: { y: 0.5 } });
-      setExtractedItems([]);
-      onClose();
-    } catch {
-      setError('บันทึกไม่สำเร็จ พื้นที่จัดเก็บอาจเต็ม กรุณาสำรองข้อมูลแล้วลองอีกครั้ง');
-    }
+      confetti({ particleCount: 50, spread: 60, origin: { y: 0.8 } });
+    } catch {}
+    onImportBatch(itemsToImport);
+    setExtractedItems([]);
+    onClose();
   };
 
   if (!isOpen) return null;
 
-  const formatBaht = (num) => {
-    return Number(num || 0).toLocaleString('th-TH', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    });
-  };
-
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-md animate-fade-in">
-      <div
-        className="w-full max-w-lg bg-neutral-900 border border-neutral-800 rounded-t-3xl sm:rounded-3xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-slide-up text-white"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="p-4 border-b border-neutral-800 flex items-center justify-between bg-neutral-900">
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+      <div className="bg-[#0C121E] border border-neutral-800 rounded-3xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
+        {/* Modal Header */}
+        <div className="p-4 border-b border-neutral-800 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-lg">
-              📸
+            <div className="w-8 h-8 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center">
+              <Sparkles className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-bold text-base text-white leading-tight">
-                เลือกและสแกนสลิปโอนเงิน (e-Slip)
-              </h3>
-              <p className="text-[11px] text-neutral-400 font-medium">
-                อ่านข้อมูลในเครื่อง 100% • ตรวจจับสลิปซ้ำให้อัตโนมัติ
-              </p>
+              <h3 className="font-extrabold text-sm text-white">{t('reviewTitle')}</h3>
+              <p className="text-[11px] text-neutral-400">{t('reviewSubtitle')}</p>
             </div>
           </div>
-
           <button
             onClick={onClose}
-            disabled={isProcessing}
-            aria-label="ปิดหน้าสแกน"
-            className="w-8 h-8 rounded-full bg-neutral-800 hover:bg-neutral-700 flex items-center justify-center text-neutral-400 hover:text-white transition-colors"
+            className="w-8 h-8 rounded-full hover:bg-neutral-800 flex items-center justify-center text-neutral-400 hover:text-white"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Modal Body */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
-          {rejectedCount > 0 && <p role="status" className="text-xs text-amber-300">อ่านไม่ได้ {rejectedCount} ไฟล์ ลองใช้ภาพต้นฉบับที่เห็นสลิปครบทั้งใบ</p>}
-          <p className="text-xs text-neutral-400">ตรวจยอด วันที่ เวลา และผู้รับก่อนบันทึก ช่องที่อ่านไม่ชัดสามารถแก้ไขได้</p>
+        <div className="p-4 overflow-y-auto space-y-4 flex-1">
           {/* Upload Dropzone */}
           <div
             onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
             onDrop={handleDrop}
             className={`border-2 border-dashed rounded-3xl p-6 text-center transition-all ${
-              dragOver
-                ? 'border-cyan-500 bg-cyan-950/30 scale-101'
-                : 'border-neutral-700 hover:border-neutral-600 bg-neutral-800/40'
+              dragOver ? 'border-cyan-500 bg-cyan-500/10' : 'border-neutral-700 hover:border-neutral-600 bg-neutral-900/60'
             }`}
           >
             <input
@@ -212,10 +197,10 @@ export default function ScanModal({
               <div className="py-6 flex flex-col items-center justify-center text-neutral-400">
                 <Loader2 className="w-10 h-10 animate-spin text-cyan-400 mb-2" />
                 <span className="font-bold text-sm text-white">
-                  กำลังอ่านข้อมูลสลิปในเครื่อง... {progress}
+                  {t('scanningTitle')} {progress}
                 </span>
                 <span className="text-xs text-neutral-400">
-                  ตรวจจับธนาคาร, วันที่, จำนวนเงิน และตรวจเช็กสลิปซ้ำ
+                  {t('quickScanTip')}
                 </span>
               </div>
             ) : (
@@ -224,10 +209,10 @@ export default function ScanModal({
                   <UploadCloud className="w-7 h-7" />
                 </div>
                 <h4 className="font-bold text-sm text-white mb-1">
-                  ลากไฟล์รูปสลิปมาวาง หรือกดเลือกรูปภาพ
+                  {t('autoScanGallery')}
                 </h4>
                 <p className="text-xs text-neutral-400 mb-4 max-w-xs">
-                  รองรับสลิปทุกธนาคารไทย (K PLUS, SCB, NEXT, KMA, ttb, ฯลฯ)
+                  {t('quickScanTip')}
                 </p>
 
                 <div className="flex flex-wrap gap-2 justify-center">
@@ -239,7 +224,7 @@ export default function ScanModal({
                     className="px-4 py-2.5 rounded-xl bg-cyan-500 text-white font-bold text-xs hover:bg-cyan-600 active:scale-95 shadow-md shadow-cyan-500/20 flex items-center gap-1.5 transition-all"
                   >
                     <Image className="w-4 h-4" />
-                    เลือกรูปสลิปจากอัลบั้ม
+                    <span>{t('pickFolder')}</span>
                   </button>
 
                   <button
@@ -250,7 +235,7 @@ export default function ScanModal({
                     className="px-4 py-2.5 rounded-xl bg-neutral-800 text-neutral-300 font-bold text-xs hover:bg-neutral-700 active:scale-95 border border-neutral-700 flex items-center gap-1.5 transition-all"
                   >
                     <Camera className="w-4 h-4" />
-                    ถ่ายภาพสลิป
+                    <span>{t('manualAdd')}</span>
                   </button>
                 </div>
               </div>
@@ -262,7 +247,7 @@ export default function ScanModal({
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-bold text-neutral-300 flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-                ทดสอบด้วยตัวอย่างสลิปสำเร็จรูป:
+                <span>Quick Test:</span>
               </span>
             </div>
             <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
@@ -284,7 +269,7 @@ export default function ScanModal({
             <div className="space-y-3 pt-2">
               <div className="flex items-center justify-between text-xs px-1">
                 <span className="font-extrabold text-white">
-                  สลิปที่ตรวจพบ ({extractedItems.length} ใบ)
+                  {t('reviewTitle')} ({extractedItems.length})
                 </span>
                 {duplicateItemsCount > 0 && (
                   <label className="flex items-center gap-1.5 cursor-pointer text-neutral-300">
@@ -294,7 +279,7 @@ export default function ScanModal({
                       onChange={(e) => setSkipDuplicates(e.target.checked)}
                       className="rounded accent-cyan-500 w-3.5 h-3.5"
                     />
-                    <span>ข้ามสลิปซ้ำ ({duplicateItemsCount})</span>
+                    <span>{t('duplicateWarning')} ({duplicateItemsCount})</span>
                   </label>
                 )}
               </div>
@@ -327,7 +312,7 @@ export default function ScanModal({
                             </span>
                             {item.isDuplicate && (
                               <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-amber-500/20 text-amber-300 font-bold shrink-0">
-                                เคยบันทึกแล้ว
+                                {t('duplicateWarning')}
                               </span>
                             )}
                           </div>
@@ -340,7 +325,7 @@ export default function ScanModal({
                       <div className="text-right shrink-0 flex items-center gap-2">
                         <div>
                           <div className="font-bold font-mono text-xs text-white">
-                            ฿{formatBaht(item.amount)}
+                            {formatAmount(item.amount, item.currency)}
                           </div>
                           <select
                             value={item.categoryId}
@@ -362,20 +347,74 @@ export default function ScanModal({
                           <X className="w-3.5 h-3.5" />
                         </button>
                       </div>
+
                       <details open={!canImportSlip(item)} className="w-full text-xs border-t border-neutral-700 pt-2">
-                        <summary className="cursor-pointer text-cyan-300">{canImportSlip(item) ? 'ตรวจสอบ / แก้ไขข้อมูล' : '⚠ กรุณากรอกข้อมูลที่อ่านไม่ครบ'}</summary>
-                        {item.slipThumbnail && <img src={item.slipThumbnail} alt="สลิปต้นฉบับ" className="max-h-64 mx-auto my-2 rounded-lg" />}
+                        <summary className="cursor-pointer text-cyan-300">
+                          {canImportSlip(item) ? t('detailTitle') : '⚠ ' + t('reviewSubtitle')}
+                        </summary>
+                        {item.slipThumbnail && <img src={item.slipThumbnail} alt="Slip" className="max-h-64 mx-auto my-2 rounded-lg" />}
                         {item.reviewWarnings?.length > 0 && <p className="text-amber-300 my-2">{item.reviewWarnings.join(' • ')}</p>}
                         <div className="grid grid-cols-2 gap-2 mt-2">
-                          {[['amount', 'ยอดเงิน', 'number'], ['date', 'วันที่', 'date'], ['time', 'เวลา', 'time'], ['payee', 'ผู้รับเงิน', 'text'], ['sender', 'ผู้โอน', 'text'], ['ref', 'เลขอ้างอิง', 'text']].map(([field, label, type]) => (
-                            <label key={field} className="flex flex-col gap-1">{label}
-                              <input aria-label={label} type={type} value={item[field] ?? ''} min={type === 'number' ? '0.01' : undefined} step={type === 'number' ? '0.01' : undefined} onChange={e => handleUpdateField(idx, field, e.target.value)} className="w-full min-w-0 rounded-lg bg-neutral-900 border border-neutral-600 p-2 text-white" />
-                            </label>
-                          ))}
-                          <label>ธนาคาร
-                            <select aria-label="ธนาคาร" value={item.bankId || ''} onChange={e => handleUpdateField(idx, 'bankId', e.target.value)} className="w-full bg-neutral-900 border border-neutral-600 rounded-lg p-2 mt-1">
-                              <option value="">เลือกธนาคารจากสลิป</option>
-                              {BANK_LIST.filter(bank => !['OTHER', 'CASH'].includes(bank.id)).map(bank => <option key={bank.id} value={bank.id}>{bank.name}</option>)}
+                          <label className="flex flex-col gap-1">{t('fieldAmount')}
+                            <input
+                              type="number"
+                              value={item.amount ?? ''}
+                              min="0.01"
+                              step="0.01"
+                              onChange={e => handleUpdateField(idx, 'amount', e.target.value)}
+                              className="w-full min-w-0 rounded-lg bg-neutral-900 border border-neutral-600 p-2 text-white"
+                            />
+                          </label>
+                          <label className="flex flex-col gap-1">{t('fieldDate')}
+                            <input
+                              type="date"
+                              value={item.date ?? ''}
+                              onChange={e => handleUpdateField(idx, 'date', e.target.value)}
+                              className="w-full min-w-0 rounded-lg bg-neutral-900 border border-neutral-600 p-2 text-white"
+                            />
+                          </label>
+                          <label className="flex flex-col gap-1">{t('fieldTime')}
+                            <input
+                              type="time"
+                              value={item.time ?? ''}
+                              onChange={e => handleUpdateField(idx, 'time', e.target.value)}
+                              className="w-full min-w-0 rounded-lg bg-neutral-900 border border-neutral-600 p-2 text-white"
+                            />
+                          </label>
+                          <label className="flex flex-col gap-1">{t('fieldPayee')}
+                            <input
+                              type="text"
+                              value={item.payee ?? ''}
+                              onChange={e => handleUpdateField(idx, 'payee', e.target.value)}
+                              className="w-full min-w-0 rounded-lg bg-neutral-900 border border-neutral-600 p-2 text-white"
+                            />
+                          </label>
+                          <label className="flex flex-col gap-1">{t('fieldSender')}
+                            <input
+                              type="text"
+                              value={item.sender ?? ''}
+                              onChange={e => handleUpdateField(idx, 'sender', e.target.value)}
+                              className="w-full min-w-0 rounded-lg bg-neutral-900 border border-neutral-600 p-2 text-white"
+                            />
+                          </label>
+                          <label className="flex flex-col gap-1">{t('fieldRef')}
+                            <input
+                              type="text"
+                              value={item.ref ?? ''}
+                              onChange={e => handleUpdateField(idx, 'ref', e.target.value)}
+                              className="w-full min-w-0 rounded-lg bg-neutral-900 border border-neutral-600 p-2 text-white"
+                            />
+                          </label>
+                          <label className="col-span-2">{t('fieldBank')}
+                            <select
+                              value={item.bankId || ''}
+                              onChange={e => handleUpdateField(idx, 'bankId', e.target.value)}
+                              className="w-full bg-neutral-900 border border-neutral-600 rounded-lg p-2 mt-1 text-white"
+                            >
+                              <option value="">{t('selectBank')}</option>
+                              {BANK_LIST.filter(bank => !['OTHER', 'CASH'].includes(bank.id)).map(bank => (
+                                <option key={bank.id} value={bank.id}>{bank.name}</option>
+                              ))}
                             </select>
                           </label>
                         </div>
@@ -392,14 +431,14 @@ export default function ScanModal({
         {extractedItems.length > 0 && (
           <div className="p-4 border-t border-neutral-800 bg-neutral-900 flex items-center justify-between gap-3">
             <div className="text-xs text-neutral-400">
-              พร้อมนำเข้า <b className="text-white">{itemsToImport.length}</b> รายการ
+              {t('totalRecords')}: <b className="text-white">{itemsToImport.length}</b>
             </div>
             <button
               onClick={handleConfirmImport}
               disabled={isProcessing || itemsToImport.length === 0}
               className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 disabled:opacity-50 text-white font-extrabold text-xs shadow-lg shadow-cyan-500/20 active:scale-95 transition-all flex items-center gap-1.5"
             >
-              <span>บันทึกเข้าสรุปยอด</span>
+              <span>{t('saveSelected')}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
@@ -408,4 +447,3 @@ export default function ScanModal({
     </div>
   );
 }
-

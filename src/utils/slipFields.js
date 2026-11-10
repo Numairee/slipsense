@@ -1,4 +1,4 @@
-import { THAI_BANKS } from '../data/banks.js';
+import { THAI_BANKS, ALL_BANKS, detectBankFromText } from '../data/banks.js';
 
 /**
  * Tesseract often emits Thai with a space between every glyph ("เล ข ท ี ร า ย ก า ร").
@@ -27,6 +27,15 @@ const THAI_MONTHS = [
   return { mm, re: new RegExp(`(\\d{1,2})\\s*${body}${THAI_MARKS}\\.?\\s*(\\d{2,4})`) };
 });
 
+const SPANISH_MONTHS = [
+  ['ene', '01'], ['feb', '02'], ['mar', '03'], ['abr', '04'], ['may', '05'], ['jun', '06'],
+  ['jul', '07'], ['ago', '08'], ['sep', '09'], ['oct', '10'], ['nov', '11'], ['dic', '12']
+];
+
+const ENGLISH_MONTHS = [
+  'jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'
+];
+
 function normalizeYear(y) {
   if (y < 100) y += y >= 40 ? 2500 : 2000;
   if (y > 2400) y -= 543;
@@ -39,26 +48,42 @@ export function parseTextToSlipFields(rawText = '') {
   const text = normalizeThaiOcr(rawText).replace(/[๐-๙]/g, ch => String(ch.charCodeAt(0) - 0x0E50));
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
 
-  // Rank monetary candidates by their labels; dates, fees and account IDs are not amounts.
-  const amountLabel = /จำนวนเงิน|ยอดเงิน|ยอดโอน|amount|โอนเงิน(?:จำนวน)?/i;
-  const currency = /บาท|thb|baht|฿/i;
-  const excluded = /ค่าธรรมเนียม|ค่าบริการ|เวลา|\btime\b|fee|ยอดคงเหลือ|balance|เลขที่|อ้างอิง|reference|transaction\s*id|บัญชี|account/i;
+  // Detect currency
+  let currencyCode = 'THB';
+  if (/(?:\$|usd)/i.test(text)) currencyCode = 'USD';
+  else if (/(?:€|eur)/i.test(text)) currencyCode = 'EUR';
+  else if (/(?:£|gbp)/i.test(text)) currencyCode = 'GBP';
+  else if (/(?:¥|jpy)/i.test(text)) currencyCode = 'JPY';
+  else if (/(?:cny|元|rmb)/i.test(text)) currencyCode = 'CNY';
+  else if (/(?:s\$|sgd)/i.test(text)) currencyCode = 'SGD';
+  else if (/(?:rm|myr)/i.test(text)) currencyCode = 'MYR';
+  else if (/(?:aud|a\$)/i.test(text)) currencyCode = 'AUD';
+  else if (/(?:cad|c\$)/i.test(text)) currencyCode = 'CAD';
+  else if (/(?:inr|₹)/i.test(text)) currencyCode = 'INR';
+  else if (/(?:krw|₩)/i.test(text)) currencyCode = 'KRW';
+  else if (/(?:บาท|thb|baht|฿)/i.test(text)) currencyCode = 'THB';
+
+  // Multi-lingual labels: Thai, English, Spanish, Chinese, Japanese, French, German
+  const amountLabel = /(?:จำนวนเงิน|ยอดเงิน|ยอดโอน|โอนเงิน(?:จำนวน)?|รวมทั้งสิ้น|ยอดชำระ|amount|total(?:\s*amount)?|grand\s*total|subtotal|paid|monto(?:\s*total)?|importe|total\s*a\s*pagar|金额|转账金额|付款金额|实付|合计|总计|支払金額|振込金額|送金額|金額|合計|montant|virement|betrag|gesamtbetrag|summe)/i;
+  const currencyPattern = /(?:\b(?:thb|baht|usd|eur|gbp|jpy|cny|rmb|sgd|myr|aud|cad|chf|inr|krw|php|vnd|idr|brl|mxn)\b|[บาท฿$€£¥元₹₩₱₫])/i;
+  const excluded = /(?:ค่าธรรมเนียม|ค่าบริการ|เวลา|\btime\b|\bfees?\b|service\s*charge|commission|comisión|手续费|手数料|ยอดคงเหลือ|\bbalance\b|current\s*balance|available\s*balance|saldo|余额|残高|เลขที่|อ้างอิง|\breference\b|\btrans(?:action)?\s*id\b|order\s*id|บัญชี|\baccount\b|account\s*no|acct)/i;
+
   const candidates = [];
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].replace(/(\d)\s*\.\s*-(?=\s*(?:บาท|THB|baht|฿)?\s*$)/i, '$1.00');
+    const line = lines[i].replace(/(\d)\s*\.\s*-(?=\s*(?:บาท|THB|baht|฿|\$|€|£|¥)?\s*$)/i, '$1.00');
     if (excluded.test(line) || (i > 0 && excluded.test(lines[i - 1]) && !/\d/.test(lines[i - 1]))) continue;
     const labelled = amountLabel.test(line);
     const previousLabel = i > 0 && amountLabel.test(lines[i - 1]) && !excluded.test(lines[i - 1]);
     const money = /(?<![\dA-Za-z.,/:-])(\d{1,3}(?:,\s*\d{3})+|\d{1,7})\s*\.\s*(\d{2})(?![\dA-Za-z.,/:-])/g;
     for (const m of line.matchAll(money)) {
       // Dot-formatted time and numeric dates must not become expenses.
-      if (/น\./.test(line) && !labelled && !currency.test(line)) continue;
+      if (/น\./.test(line) && !labelled && !currencyPattern.test(line)) continue;
       const value = Number(m[1].replace(/[,\s]/g, '') + '.' + m[2]);
-      if (value > 0 && value <= 1000000) candidates.push({ value, score: labelled ? 4 : previousLabel ? 3 : currency.test(line) ? 2 : 1 });
+      if (value > 0 && value <= 1000000) candidates.push({ value, score: labelled ? 4 : previousLabel ? 3 : currencyPattern.test(line) ? 2 : 1 });
     }
-    if (labelled || previousLabel || currency.test(line)) {
-      const m = line.match(/^(?:.*?(?:จำนวนเงิน|ยอดเงิน|ยอดโอน|amount|฿|THB)[:：\s]*)?(\d{1,3}(?:,\d{3})+|\d{1,7})(?:\s*(?:บาท|THB|baht|฿))?\s*$/i);
-      if (m) {
+    if (labelled || previousLabel || currencyPattern.test(line)) {
+      const m = line.match(/^(?:.*?(?:จำนวนเงิน|ยอดเงิน|ยอดโอน|amount|total|monto|金额|金額|฿|THB|\$|€|£|¥)[:：\s]*)?(\d{1,3}(?:,\d{3})+|\d{1,7})(?:\s*(?:บาท|THB|baht|฿|\b(?:usd|eur|gbp|jpy|cny)\b|元|\$|€|£|¥))?\s*$/i);
+      if (m && !/\b(?:20\d\d|25\d\d)\b/.test(line)) {
         const value = Number(m[1].replace(/,/g, ''));
         if (value > 0 && value <= 1000000) candidates.push({ value, score: labelled ? 4 : 3 });
       }
@@ -71,10 +96,21 @@ export function parseTextToSlipFields(rawText = '') {
 
   // 2. Extract Time
   let time = null;
-  const timeColonRe = /\b((?:[01]?\d|2[0-3]):[0-5]\d)\b/;
+  const time12hRe = /\b((?:0?[1-9]|1[0-2]):[0-5]\d)\s*(AM|PM)\b/i;
+  const time24hRe = /\b((?:[01]?\d|2[0-3]):[0-5]\d)(?::[0-5]\d)?\b/;
   const timeDotRe = /\b((?:[01]?\d|2[0-3])\.[0-5]\d)\s*น\./;
+
   for (const line of lines) {
-    const mc = line.match(timeColonRe);
+    const m12 = line.match(time12hRe);
+    if (m12) {
+      let [hh, mm] = m12[1].split(':').map(Number);
+      const ampm = m12[2].toUpperCase();
+      if (ampm === 'PM' && hh < 12) hh += 12;
+      if (ampm === 'AM' && hh === 12) hh = 0;
+      time = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+      break;
+    }
+    const mc = line.match(time24hRe);
     if (mc) {
       time = mc[1].length === 4 ? '0' + mc[1] : mc[1];
       break;
@@ -93,6 +129,7 @@ export function parseTextToSlipFields(rawText = '') {
 
   for (const line of lines) {
     let found = false;
+    // Check Thai Months
     for (const { mm, re } of THAI_MONTHS) {
       const tm = line.match(re);
       if (tm) {
@@ -105,11 +142,33 @@ export function parseTextToSlipFields(rawText = '') {
     }
     if (found) break;
 
+    // Check East Asian Date: YYYY年MM月DD日
+    const eaMatch = line.match(/(\d{4})[年/\-.]\s*(\d{1,2})[月/\-.]\s*(\d{1,2})[日號]?/);
+    if (eaMatch) {
+      const y = normalizeYear(parseInt(eaMatch[1], 10));
+      const m = eaMatch[2].padStart(2, '0');
+      const d = eaMatch[3].padStart(2, '0');
+      if (parseInt(m, 10) >= 1 && parseInt(m, 10) <= 12 && parseInt(d, 10) >= 1 && parseInt(d, 10) <= 31) {
+        date = `${y}-${m}-${d}`;
+        break;
+      }
+    }
+
     const slashMatch = line.match(dateSlashRe);
     if (slashMatch && !MASKED_ACCOUNT_RE.test(line)) {
-      const d = slashMatch[1].padStart(2, '0');
-      const m = slashMatch[2].padStart(2, '0');
+      const part1 = parseInt(slashMatch[1], 10);
+      const part2 = parseInt(slashMatch[2], 10);
       const y = normalizeYear(parseInt(slashMatch[3], 10));
+      
+      // Determine day and month
+      let d, m;
+      if (part1 > 12 && part2 <= 12) {
+        d = String(part1).padStart(2, '0');
+        m = String(part2).padStart(2, '0');
+      } else {
+        d = String(part1).padStart(2, '0');
+        m = String(part2).padStart(2, '0');
+      }
       if (parseInt(m, 10) >= 1 && parseInt(m, 10) <= 12 && parseInt(d, 10) >= 1 && parseInt(d, 10) <= 31) {
         date = `${y}-${m}-${d}`;
         break;
@@ -117,18 +176,40 @@ export function parseTextToSlipFields(rawText = '') {
     }
   }
 
-  const englishMonth = text.match(/\b(\d{1,2})\s+(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+(\d{2,4})\b/i);
-  if (!date && englishMonth) {
-    const month = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'].indexOf(englishMonth[2].slice(0, 3).toLowerCase()) + 1;
-    date = `${normalizeYear(Number(englishMonth[3]))}-${String(month).padStart(2, '0')}-${englishMonth[1].padStart(2, '0')}`;
+  // English Month name check: "8 Nov 2026" or "Nov 8, 2026"
+  if (!date) {
+    const enDayFirst = text.match(/\b(\d{1,2})\s+(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+(\d{2,4})\b/i);
+    if (enDayFirst) {
+      const month = ENGLISH_MONTHS.indexOf(enDayFirst[2].slice(0, 3).toLowerCase()) + 1;
+      date = `${normalizeYear(Number(enDayFirst[3]))}-${String(month).padStart(2, '0')}-${enDayFirst[1].padStart(2, '0')}`;
+    } else {
+      const enMonthFirst = text.match(/\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{2,4})\b/i);
+      if (enMonthFirst) {
+        const month = ENGLISH_MONTHS.indexOf(enMonthFirst[1].slice(0, 3).toLowerCase()) + 1;
+        date = `${normalizeYear(Number(enMonthFirst[3]))}-${String(month).padStart(2, '0')}-${enMonthFirst[2].padStart(2, '0')}`;
+      }
+    }
   }
+
+  // Spanish Month check: "8 de noviembre de 2026"
+  if (!date) {
+    const esMatch = text.match(/\b(\d{1,2})\s+(?:de\s+)?(ene(?:ro)?|feb(?:rero)?|mar(?:zo)?|abr(?:il)?|may(?:o)?|jun(?:io)?|jul(?:io)?|ago(?:sto)?|sep(?:tiembre)?|oct(?:ubre)?|nov(?:iembre)?|dic(?:iembre)?)\.?,?\s+(?:de\s+)?(\d{2,4})\b/i);
+    if (esMatch) {
+      const abbr = esMatch[2].slice(0, 3).toLowerCase();
+      const monthObj = SPANISH_MONTHS.find(([m]) => m === abbr);
+      if (monthObj) {
+        date = `${normalizeYear(Number(esMatch[3]))}-${monthObj[1]}-${esMatch[1].padStart(2, '0')}`;
+      }
+    }
+  }
+
   const isoMatch = text.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
   if (isoMatch) date = `${normalizeYear(Number(isoMatch[1]))}-${isoMatch[2]}-${isoMatch[3]}`;
   if (date && !isValidSlipDate(date)) date = null;
 
-  // 4. Extract Payee
+  // 4. Extract Payee (Recipient) across languages
   let payee = null;
-  const payeeRe = /(?:ไปยัง|ผู้รับเงิน|ชื่อผู้รับ|ผู้รับ|โอนให้|^To\b)[:\s]*([^\n\r]+)/i;
+  const payeeRe = /(?:ไปยัง|ผู้รับเงิน|ชื่อผู้รับ|ผู้รับ|โอนให้|^To\b|recipient|payee|merchant|paid to|transfer to|destinatario|beneficiario|comercio|收款人|收款方|转入|商户|受取人|振込先|加盟店)[:：\s]*([^\n\r]+)/i;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const m = line.match(payeeRe);
@@ -136,14 +217,15 @@ export function parseTextToSlipFields(rawText = '') {
       payee = m[1].trim();
       break;
     }
-    if (/^(ไปยัง|ผู้รับเงิน|ชื่อผู้รับ|ผู้รับ|โอนให้|to)[:：]?$/i.test(line) && i + 1 < lines.length) {
+    if (/^(ไปยัง|ผู้รับเงิน|ชื่อผู้รับ|ผู้รับ|โอนให้|to|recipient|payee|destinatario|beneficiario|收款人|受取人)[:：]?$/i.test(line) && i + 1 < lines.length) {
       payee = lines[i + 1].trim();
       break;
     }
   }
-  // 5. Extract Sender
+
+  // 5. Extract Sender across languages
   let sender = null;
-  const senderRe = /(?:จาก|ผู้โอน|From)[:\s]*([^\n\r]+)/i;
+  const senderRe = /(?:จาก|ผู้โอน|^From\b|sender|payer|remitente|pagador|付款人|付款方|转出|ご依頼人|振込元)[:：\s]*([^\n\r]+)/i;
   for (let i = 0; i < lines.length; i++) {
     const m = lines[i].match(senderRe);
     if (m && m[1].trim()) {
@@ -152,10 +234,10 @@ export function parseTextToSlipFields(rawText = '') {
     }
   }
 
-  // 6. Extract Reference
+  // 6. Extract Reference across languages
   let refCode = null;
-  const refLabelRe = /(?:รหัสอ้างอิง|เลขที่?รายการ|เลขที่?อ้างอิง|Ref(?:erence)?|Transaction ID)/i;
-  const codeRe = /([A-Za-z0-9]{10,35})/;
+  const refLabelRe = /(?:รหัสอ้างอิง|เลขที่?รายการ|เลขที่?อ้างอิง|Ref(?:erence)?|Ref\s*No|Transaction\s*ID|Trans\s*ID|Order\s*ID|Receipt\s*(?:No|#)|Invoice\s*(?:No|#)|Referencia|交易单号|交易流水号|凭证号|参考号|取引番号|照会番号)/i;
+  const codeRe = /([A-Za-z0-9_-]{8,40})/;
   for (let i = 0; i < lines.length; i++) {
     if (!refLabelRe.test(lines[i])) continue;
     const after = lines[i].split(/[:：]/).slice(1).join(':');
@@ -166,9 +248,11 @@ export function parseTextToSlipFields(rawText = '') {
     }
   }
 
-  // 7. Detect Bank from Text
+  // 7. Detect Bank or Payment Provider from Text
   let bankId = null;
   const fullLower = text.toLowerCase();
+  
+  // Specific checks with high fidelity
   if (/make(?: by kbank)?|cloud pocket/.test(fullLower)) bankId = 'MAKE';
   else if (/kept/.test(fullLower)) bankId = 'KEPT';
   else if (/mymo|ออมสิน/.test(fullLower)) bankId = 'GSB';
@@ -178,11 +262,20 @@ export function parseTextToSlipFields(rawText = '') {
   else if (fullLower.includes('กรุงศรี') || fullLower.includes('bay') || fullLower.includes('kma')) bankId = 'BAY';
   else if (fullLower.includes('กรุงเทพ') || fullLower.includes('bbl') || fullLower.includes('bualuang')) bankId = 'BBL';
   else if (fullLower.includes('ttb') || fullLower.includes('ธนชาต')) bankId = 'TTB';
-  else if (fullLower.includes('make') || fullLower.includes('cloud pocket')) bankId = 'MAKE';
   else if (fullLower.includes('dime') || fullLower.includes('เกียรตินาคิน')) bankId = 'DIME';
   else if (fullLower.includes('truemoney') || fullLower.includes('ทรูมันนี่')) bankId = 'TRUEMONEY';
+  else {
+    // Global & international banks/fintech providers
+    const detected = detectBankFromText(text);
+    if (detected && detected.id !== 'OTHER' && detected.id !== 'CASH') {
+      bankId = detected.id;
+    }
+  }
 
-  if (payee && /จำนวน|ยอดเงิน|ค่าธรรมเนียม|อ้างอิง|amount|reference|fee/i.test(payee)) payee = null;
+  if (payee && /(?:จำนวน|ยอดเงิน|ค่าธรรมเนียม|อ้างอิง|\bamount\b|\btotal\b|\breference\b|\bfees?\b|\bmonto\b|金额|金額)/i.test(payee)) {
+    payee = null;
+  }
+
   return {
     amount,
     ambiguousAmount,
@@ -191,10 +284,10 @@ export function parseTextToSlipFields(rawText = '') {
     payee,
     sender,
     refCode,
-    bankId
+    bankId,
+    currency: currencyCode
   };
 }
-
 
 export function isValidSlipDate(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) return false;
@@ -214,8 +307,9 @@ export function isDuplicateSlip(item, existing = []) {
 }
 
 export function canImportSlip(item) {
+  const bankValid = !!(ALL_BANKS[item.bankId] || THAI_BANKS[item.bankId]) && !['OTHER', 'CASH'].includes(item.bankId);
   return Number.isFinite(Number(item.amount)) && Number(item.amount) > 0 &&
-    Number(item.amount) <= 1000000 && !!THAI_BANKS[item.bankId] && !['OTHER', 'CASH'].includes(item.bankId) && isValidSlipDate(item.date) &&
+    Number(item.amount) <= 1000000 && bankValid && isValidSlipDate(item.date) &&
     /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(item.time || '') && !!item.payee?.trim();
 }
 

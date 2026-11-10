@@ -1,14 +1,17 @@
 import React from 'react';
 import { Home, BarChart3, Target, Receipt, Settings } from 'lucide-react';
 import { sound } from '../utils/sound';
+import { useI18n } from '../i18n/index.jsx';
 
 export default function Navbar({ activeTab, onChangeTab }) {
+  const { t } = useI18n();
+
   const tabs = [
-    { id: 'home', label: 'ภาพรวม', icon: Home },
-    { id: 'analytics', label: 'วิเคราะห์', icon: BarChart3 },
-    { id: 'budgets', label: 'งบประมาณ', icon: Target },
-    { id: 'history', label: 'ประวัติ', icon: Receipt },
-    { id: 'settings', label: 'ตั้งค่า', icon: Settings },
+    { id: 'home', label: t('tabHome'), icon: Home },
+    { id: 'analytics', label: t('tabAnalytics'), icon: BarChart3 },
+    { id: 'budgets', label: t('tabBudgets'), icon: Target },
+    { id: 'history', label: t('tabHistory'), icon: Receipt },
+    { id: 'settings', label: t('tabSettings'), icon: Settings },
   ];
 
   const handleTabClick = (id) => {

@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { Download, X, Smartphone, Sparkles, CheckCircle2, Zap } from 'lucide-react';
+import { Download, X, Zap } from 'lucide-react';
 import { AutoScanner } from '../utils/galleryAutoScanner';
+import { useI18n } from '../i18n/index.jsx';
 
 export default function InstallPrompt() {
+  const { t } = useI18n();
   const [isDismissed, setIsDismissed] = useState(false);
   const isNative = AutoScanner.isNative();
 
@@ -18,33 +20,33 @@ export default function InstallPrompt() {
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
             <h5 className="font-extrabold text-xs text-white leading-tight">
-              ติดตั้ง SlipSense v2.0.0 สำหรับ Android (.apk)
+              {t('installTitle')}
             </h5>
             <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-cyan-500 text-white uppercase tracking-wider">
               NEW
             </span>
           </div>
           <p className="text-[11px] text-neutral-300 mt-0.5 leading-snug">
-            ติดตั้งเพื่อเปิดใช้ <strong className="text-cyan-300">ระบบกวาดอ่านสลิปอัจฉริยะ</strong> ในเครื่องทันที
+            {t('installDesc')}
           </p>
         </div>
       </div>
 
       <div className="flex items-center gap-1.5 shrink-0">
         <a
-          href="https://github.com/Numairee/pygmy-android/releases"
+          href="https://github.com/Numairee/slipsense/releases"
           target="_blank"
           rel="noopener noreferrer"
           className="px-3 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 text-white font-extrabold text-xs hover:from-emerald-600 hover:to-cyan-600 active:scale-95 shadow-md shadow-cyan-500/20 transition-all flex items-center gap-1.5"
         >
           <Download className="w-3.5 h-3.5" />
-          <span>โหลด APK</span>
+          <span>{t('downloadApk')}</span>
         </a>
 
         <button
           onClick={() => setIsDismissed(true)}
           className="w-7 h-7 rounded-full hover:bg-neutral-800 flex items-center justify-center text-neutral-400 transition-colors"
-          title="ปิดการแจ้งเตือน"
+          title={t('close')}
         >
           <X className="w-4 h-4" />
         </button>

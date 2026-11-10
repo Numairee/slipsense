@@ -1,11 +1,7 @@
-import React from 'react';
-import { ChevronLeft, ChevronRight, ShieldCheck, Sparkles, Zap } from 'lucide-react';
+import React, { useState } from 'react';
+import { ChevronLeft, ChevronRight, ShieldCheck, Zap, Globe } from 'lucide-react';
 import { AutoScanner } from '../utils/galleryAutoScanner';
-
-const THAI_MONTH_NAMES = [
-  'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
-  'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'
-];
+import { useI18n } from '../i18n/index.jsx';
 
 export default function Header({
   currentDate,
@@ -14,12 +10,18 @@ export default function Header({
   onResetMonth,
   onOpenPrivacyInfo
 }) {
+  const { t, language, setLanguage, supportedLanguages } = useI18n();
+  const [showLangMenu, setShowLangMenu] = useState(false);
+
   const monthIdx = currentDate.getMonth();
-  const yearBE = currentDate.getFullYear() + 543;
-  const monthName = THAI_MONTH_NAMES[monthIdx];
+  const yearDisplay = language === 'th' ? currentDate.getFullYear() + 543 : currentDate.getFullYear();
+  const months = t('months');
+  const monthName = Array.isArray(months) ? months[monthIdx] : '';
   const now = new Date();
   const isCurrentMonth = currentDate.getFullYear() === now.getFullYear() && currentDate.getMonth() === now.getMonth();
   const isNative = AutoScanner.isNative();
+
+  const currentLangObj = supportedLanguages.find(l => l.code === language) || supportedLanguages[0];
 
   return (
     <header
@@ -43,51 +45,88 @@ export default function Header({
               </h1>
               <span className="text-[9px] font-bold tracking-wide uppercase px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-0.5">
                 <ShieldCheck className="w-2.5 h-2.5" />
-                No-Track
+                {t('noTrackBadge')}
               </span>
               <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-full bg-neutral-800 text-neutral-400 border border-neutral-700">
-                v2.1.1
+                v2.2.0
               </span>
             </div>
             <p className="text-[10px] text-neutral-400 font-medium mt-0.5">
-              Smart Slip & Wealth Intelligence • ออฟไลน์ 100%
+              {t('appSubtitle')}
             </p>
           </div>
         </div>
 
-        {/* Month Selector Pill */}
-        <div className="flex items-center bg-neutral-900 border border-neutral-800 rounded-2xl shadow-md p-0.5">
-          <button
-            onClick={onPrevMonth}
-            className="w-7 h-7 flex items-center justify-center text-neutral-400 hover:text-white rounded-xl hover:bg-neutral-800 transition-colors active:scale-90"
-            title="เดือนก่อนหน้า"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
+        {/* Right Controls: Language Pill + Month Selector */}
+        <div className="flex items-center gap-1.5">
+          {/* Quick Language Selector */}
+          <div className="relative">
+            <button
+              onClick={() => setShowLangMenu(!showLangMenu)}
+              className="flex items-center gap-1 px-2 py-1 rounded-xl bg-neutral-900 border border-neutral-800 text-[11px] font-bold text-neutral-300 hover:text-white hover:bg-neutral-800 transition-colors active:scale-95 shadow-sm"
+              title={t('languageSection')}
+            >
+              <span>{currentLangObj.flag}</span>
+              <span className="text-[10px] uppercase font-mono">{currentLangObj.code}</span>
+            </button>
 
-          <div
-            onClick={onResetMonth}
-            className="px-2 py-0.5 text-center select-none cursor-pointer hover:bg-neutral-800 rounded-lg transition-colors min-w-[74px]"
-            title="แตะเพื่อกลับมาเดือนปัจจุบัน"
-          >
-            <div className="text-[11px] font-extrabold text-white leading-tight">
-              {monthName}
-            </div>
-            <div className="text-[9px] font-semibold text-neutral-400 leading-tight flex items-center justify-center gap-1">
-              <span>{yearBE}</span>
-              {!isCurrentMonth && (
-                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" title="แตะเพื่อกลับเดือนปัจจุบัน" />
-              )}
-            </div>
+            {showLangMenu && (
+              <div className="absolute right-0 mt-1.5 w-36 bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl p-1.5 z-50 animate-fade-in">
+                {supportedLanguages.map((l) => (
+                  <button
+                    key={l.code}
+                    onClick={() => {
+                      setLanguage(l.code);
+                      setShowLangMenu(false);
+                    }}
+                    className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-colors text-left ${
+                      language === l.code
+                        ? 'bg-cyan-500/20 text-cyan-300 font-bold'
+                        : 'text-neutral-300 hover:bg-neutral-800 hover:text-white'
+                    }`}
+                  >
+                    <span>{l.flag}</span>
+                    <span>{l.nativeName}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
-          <button
-            onClick={onNextMonth}
-            className="w-7 h-7 flex items-center justify-center text-neutral-400 hover:text-white rounded-xl hover:bg-neutral-800 transition-colors active:scale-90"
-            title="เดือนถัดไป"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
+          {/* Month Selector Pill */}
+          <div className="flex items-center bg-neutral-900 border border-neutral-800 rounded-2xl shadow-md p-0.5">
+            <button
+              onClick={onPrevMonth}
+              className="w-6 h-6 flex items-center justify-center text-neutral-400 hover:text-white rounded-xl hover:bg-neutral-800 transition-colors active:scale-90"
+              title={t('prevMonth')}
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </button>
+
+            <div
+              onClick={onResetMonth}
+              className="px-1.5 py-0.5 text-center select-none cursor-pointer hover:bg-neutral-800 rounded-lg transition-colors min-w-[68px]"
+              title={t('currentMonthTip')}
+            >
+              <div className="text-[10px] font-extrabold text-white leading-tight">
+                {monthName}
+              </div>
+              <div className="text-[9px] font-semibold text-neutral-400 leading-tight flex items-center justify-center gap-1">
+                <span>{yearDisplay}</span>
+                {!isCurrentMonth && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                )}
+              </div>
+            </div>
+
+            <button
+              onClick={onNextMonth}
+              className="w-6 h-6 flex items-center justify-center text-neutral-400 hover:text-white rounded-xl hover:bg-neutral-800 transition-colors active:scale-90"
+              title={t('nextMonth')}
+            >
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       </div>
     </header>

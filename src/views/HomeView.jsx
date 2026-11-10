@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import SummaryCards from '../components/SummaryCards';
 import TransactionItem from '../components/TransactionItem';
-import { Camera, Plus, Sparkles, Receipt, Zap, Loader2, Calendar, RefreshCw, Trash2, ArrowUpRight, TrendingUp, Folder } from 'lucide-react';
+import { Camera, Sparkles, Zap, Loader2, Calendar, Folder } from 'lucide-react';
 import { sound } from '../utils/sound';
 import { calculateFinancialHealth } from '../utils/analyticsEngine';
+import { useI18n } from '../i18n/index.jsx';
 
 export default function HomeView({
   transactions,
@@ -22,6 +23,7 @@ export default function HomeView({
   onAddTransaction,
   onNavigateToAnalytics
 }) {
+  const { t, language } = useI18n();
   const [viewScope, setViewScope] = useState('month'); // 'month' | 'all'
 
   const curYear = currentDate.getFullYear();
@@ -60,22 +62,23 @@ export default function HomeView({
   const sortedDates = Object.keys(groupedByDate).sort((a, b) => b.localeCompare(a));
 
   const formatDateHeader = (dateStr) => {
-    if (dateStr === todayStr) return 'วันนี้';
-    if (dateStr === yesterdayStr) return 'เมื่อวาน';
+    if (dateStr === todayStr) return t('today');
+    if (dateStr === yesterdayStr) return t('yesterday');
     const parts = dateStr.split('-');
     if (parts.length !== 3) return dateStr;
     const [y, m, d] = parts;
-    const thaiMonthsShort = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+    const months = t('months');
     const mIdx = Math.max(0, Math.min(11, parseInt(m, 10) - 1));
-    const yearBE = (parseInt(y, 10) + 543).toString().slice(-2);
-    return `${parseInt(d, 10)} ${thaiMonthsShort[mIdx]} ${yearBE}`;
+    const monthName = Array.isArray(months) ? months[mIdx] : m;
+    const displayYear = language === 'th' ? parseInt(y, 10) + 543 : y;
+    return `${parseInt(d, 10)} ${monthName} ${displayYear}`;
   };
 
   const health = calculateFinancialHealth(transactions, currentDate, budgets);
 
   return (
     <div className="space-y-3.5 pb-24 animate-fade-in">
-      {/* Month Warning Pill if user navigated away from current month */}
+      {/* Month Navigation Pill */}
       {!isCurrentMonthNow && (
         <div
           onClick={() => {
@@ -86,61 +89,23 @@ export default function HomeView({
         >
           <div className="flex items-center gap-1.5">
             <Calendar className="w-3.5 h-3.5 shrink-0" />
-            <span>กำลังดูเดือน {curMonth}/{curYear + 543}</span>
+            <span>{curMonth}/{language === 'th' ? curYear + 543 : curYear}</span>
           </div>
           <span className="bg-white/20 px-2 py-0.5 rounded-lg text-[10px] font-extrabold">
-            กลับเดือนปัจจุบัน ↩
+            {t('currentMonthTip')} ↩
           </span>
         </div>
       )}
 
-      {/* Hero Apple Card Style Balance & Burn Rate */}
+      {/* Hero Summary Card */}
       <SummaryCards
         totalAmount={totalAmount}
         dailyAverage={dailyAverage}
         count={displayedTxs.length}
         totalAllTimeCount={transactions.length}
         currentDay={daysPassed}
-        titleLabel={effectiveScope === 'all' && monthTxs.length === 0 && transactions.length > 0
-          ? 'ยอดใช้จ่ายรวมทั้งหมด'
-          : 'ยอดใช้จ่ายรวมเดือนนี้'}
+        titleLabel={t('totalExpenses')}
       />
-
-      {/* Quick Wealth Intelligence Snapshot */}
-      <div
-        onClick={() => {
-          sound.playPop();
-          if (onNavigateToAnalytics) onNavigateToAnalytics();
-        }}
-        className="rounded-2xl p-3 bg-neutral-900 border border-neutral-800 hover:border-neutral-700 active:scale-99 transition-all cursor-pointer shadow-md flex items-center justify-between"
-      >
-        <div className="flex items-center gap-2.5">
-          <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center font-black text-sm font-mono"
-            style={{
-              backgroundColor: `${health.color}20`,
-              color: health.color,
-              border: `1px solid ${health.color}40`
-            }}
-          >
-            {health.grade}
-          </div>
-          <div>
-            <div className="text-xs font-bold text-white flex items-center gap-1">
-              <span>{health.title}</span>
-              <Sparkles className="w-3 h-3 text-amber-400" />
-            </div>
-            <div className="text-[10px] text-neutral-400">
-              คะแนนสุขภาพการเงิน {health.score}/100 • แตะเพื่อดูบทวิเคราะห์เต็ม
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-1 text-cyan-400 text-xs font-bold shrink-0">
-          <span>ดูวิเคราะห์</span>
-          <ArrowUpRight className="w-3.5 h-3.5" />
-        </div>
-      </div>
 
       {/* Primary Action Bar */}
       <div className="space-y-2">
@@ -163,40 +128,29 @@ export default function HomeView({
             </div>
             <div className="text-left">
               <div className="leading-tight text-xs sm:text-sm font-black">
-                {isAutoScanning ? 'กำลังกวาดอ่านสลิปธนาคาร...' : 'กวาดอ่านสลิปอัตโนมัติ ⚡'}
+                {isAutoScanning ? t('scanningTitle') : t('autoScanGallery')}
               </div>
               <div className="text-[10px] text-emerald-100 font-medium">
-                ตรวจหาจากโฟลเดอร์ธนาคารทั้งหมด (K PLUS, SCB, NEXT, ภาพหน้าจอ)
+                {t('quickScanTip')}
               </div>
             </div>
           </div>
           <span className="text-[11px] font-extrabold bg-white/25 px-2.5 py-1 rounded-xl shrink-0">
-            {isAutoScanning ? 'รอสักครู่...' : 'กวาดเลย'}
+            ⚡
           </span>
         </button>
 
-        {/* Secondary Action Row: Choose Folder, Pick Image, Cash */}
-        <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
+        {/* Secondary Action Row: Choose Folder, Manual Add */}
+        <div className="grid grid-cols-2 gap-2">
           <button
             onClick={() => {
               sound.playPop();
               if (onOpenAlbumPicker) onOpenAlbumPicker();
             }}
-            className="py-2.5 px-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 active:scale-98 border border-neutral-800 text-neutral-200 font-bold text-[11px] sm:text-xs shadow-md flex flex-col sm:flex-row items-center justify-center gap-1 transition-all"
+            className="py-2.5 px-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 active:scale-98 border border-neutral-800 text-neutral-200 font-bold text-xs shadow-md flex items-center justify-center gap-1.5 transition-all"
           >
-            <Folder className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-            <span>เลือกโฟลเดอร์</span>
-          </button>
-
-          <button
-            onClick={() => {
-              sound.playPop();
-              onOpenScanModal();
-            }}
-            className="py-2.5 px-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 active:scale-98 border border-neutral-800 text-neutral-200 font-bold text-[11px] sm:text-xs shadow-md flex flex-col sm:flex-row items-center justify-center gap-1 transition-all"
-          >
-            <Camera className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-            <span>เลือกรูปเอง</span>
+            <Folder className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>{t('pickFolder')}</span>
           </button>
 
           <button
@@ -204,119 +158,46 @@ export default function HomeView({
               sound.playPop();
               onOpenManualModal();
             }}
-            className="py-2.5 px-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 active:scale-98 border border-neutral-800 text-neutral-200 font-bold text-[11px] sm:text-xs shadow-md flex flex-col sm:flex-row items-center justify-center gap-1 transition-all"
+            className="py-2.5 px-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 active:scale-98 border border-neutral-800 text-neutral-200 font-bold text-xs shadow-md flex items-center justify-center gap-1.5 transition-all"
           >
-            <Plus className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-            <span>จดเงินสด</span>
+            <Camera className="w-4 h-4 text-cyan-400 shrink-0" />
+            <span>{t('manualAdd')}</span>
           </button>
         </div>
       </div>
 
-      {/* Transactions Section */}
-      <div className="pt-1">
-        <div className="flex items-center justify-between mb-2.5">
-          <h3 className="font-extrabold text-xs sm:text-sm text-white tracking-tight flex items-center gap-1.5">
-            <Receipt className="w-4 h-4 text-cyan-400" />
-            <span>รายการใช้จ่าย</span>
+      {/* Transaction List */}
+      <div className="space-y-2 pt-2">
+        <div className="flex items-center justify-between px-1">
+          <h3 className="font-extrabold text-sm text-white tracking-tight">
+            {t('recentTransactions')}
           </h3>
-
-          <div className="flex items-center gap-1.5">
-            {transactions.length > 0 && onOpenResetModal && (
-              <button
-                type="button"
-                onClick={() => {
-                  sound.playPop();
-                  onOpenResetModal();
-                }}
-                title="ล้างข้อมูลแอปทั้งหมดหรือสแกนใหม่"
-                className="px-2.5 py-1 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 active:scale-95 font-bold text-[10px] flex items-center gap-1 border border-rose-500/30 transition-all shadow-2xs"
-              >
-                <Trash2 className="w-3 h-3 text-rose-400" />
-                <span>ล้างแอป</span>
-              </button>
-            )}
-
-            {/* Segmented Scope Filter: เดือนนี้ vs ทั้งหมด */}
-            <div className="flex items-center bg-neutral-900 border border-neutral-800 p-0.5 rounded-xl text-[11px] font-bold">
-              <button
-                type="button"
-                onClick={() => {
-                  sound.playPop();
-                  setViewScope('month');
-                }}
-                className={`px-2.5 py-1 rounded-lg transition-all ${
-                  effectiveScope === 'month'
-                    ? 'bg-neutral-800 text-white shadow-2xs'
-                    : 'text-neutral-500 hover:text-neutral-300'
-                }`}
-              >
-                เดือนนี้ ({monthTxs.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  sound.playPop();
-                  setViewScope('all');
-                }}
-                className={`px-2.5 py-1 rounded-lg transition-all ${
-                  effectiveScope === 'all'
-                    ? 'bg-neutral-800 text-white shadow-2xs'
-                    : 'text-neutral-500 hover:text-neutral-300'
-                }`}
-              >
-                ทั้งหมด ({transactions.length})
-              </button>
-            </div>
-          </div>
+          <span className="text-xs font-bold text-neutral-400">
+            {displayedTxs.length} {t('itemsCount')}
+          </span>
         </div>
 
-        {/* Empty State */}
         {displayedTxs.length === 0 ? (
-          <div className="text-center py-10 px-4 rounded-3xl bg-neutral-900 border border-neutral-800/80 shadow-md">
-            <div className="w-12 h-12 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center mx-auto mb-3 text-cyan-400">
-              <Receipt className="w-6 h-6" />
-            </div>
-            <h4 className="font-extrabold text-sm text-white">
-              {effectiveScope === 'month' ? 'ยังไม่มีรายการในเดือนนี้' : 'ยังไม่มีประวัติสลิปในแอป'}
-            </h4>
-            <p className="text-xs text-neutral-400 max-w-xs mx-auto mt-1 leading-relaxed">
-              กดปุ่ม <span className="text-emerald-400 font-bold">กวาดอ่านสลิปอัตโนมัติ</span> ด้านบน เพื่อตรวจหาและบันทึกสลิปโอนเงินจากอัลบั้มเครื่องทันที
-            </p>
+          <div className="text-center py-10 px-4 bg-neutral-900/60 rounded-3xl border border-neutral-800 text-neutral-400 text-xs">
+            <p className="font-bold text-sm text-neutral-300 mb-1">{t('noTransactionsYet')}</p>
+            <p>{t('quickScanTip')}</p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {sortedDates.map((dateStr) => {
-              const dayTxs = groupedByDate[dateStr];
-              const dayTotal = dayTxs.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
-
-              return (
-                <div key={dateStr} className="space-y-1.5">
-                  <div className="flex items-center justify-between px-1 text-[11px]">
-                    <span className="font-extrabold text-neutral-400">
-                      {formatDateHeader(dateStr)}
-                    </span>
-                    <span className="font-bold font-mono text-neutral-400">
-                      รวม ฿{dayTotal.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
-                    </span>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    {dayTxs.map((tx) => (
-                      <TransactionItem
-                        key={tx.id}
-                        transaction={tx}
-                        categories={categories}
-                        onClick={() => {
-                          sound.playPop();
-                          onOpenDetailModal(tx);
-                        }}
-                      />
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          sortedDates.map((dateStr) => (
+            <div key={dateStr} className="space-y-1.5">
+              <div className="text-[11px] font-bold text-neutral-400 px-1 pt-2">
+                {formatDateHeader(dateStr)}
+              </div>
+              {groupedByDate[dateStr].map((tx) => (
+                <TransactionItem
+                  key={tx.id}
+                  transaction={tx}
+                  categories={categories}
+                  onClick={onOpenDetailModal}
+                />
+              ))}
+            </div>
+          ))
         )}
       </div>
     </div>

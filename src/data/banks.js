@@ -1,8 +1,15 @@
-// Thai Bank Definitions with official brand colors, codes, and OCR detection patterns
+// Bank and Payment Platform Definitions with brand colors, codes, and OCR detection patterns
+// Supports both Thai financial institutions and global fintech / banking providers
+
 export const THAI_BANKS = {
   OTHER: {
-    id: 'OTHER', name: 'ไม่ทราบธนาคาร', shortName: 'ไม่ทราบ',
-    color: '#525252', textColor: '#ffffff', keywords: [], iconText: '?'
+    id: 'OTHER',
+    name: 'ไม่ทราบธนาคาร',
+    shortName: 'ไม่ทราบ',
+    color: '#525252',
+    textColor: '#ffffff',
+    keywords: [],
+    iconText: '?'
   },
   KBANK: {
     id: 'KBANK',
@@ -151,22 +158,307 @@ export const THAI_BANKS = {
   }
 };
 
-export const BANK_LIST = Object.values(THAI_BANKS);
+export const GLOBAL_BANKS = {
+  PAYPAL: {
+    id: 'PAYPAL',
+    code: 'PP',
+    name: 'PayPal',
+    fullName: 'PayPal Transfer / Payment',
+    shortName: 'PayPal',
+    color: '#003087',
+    textColor: '#ffffff',
+    bgLight: '#e6f0fa',
+    keywords: ['paypal', 'paypal transfer', 'paypal balance', 'paypal inc'],
+    iconText: 'PP',
+  },
+  STRIPE: {
+    id: 'STRIPE',
+    code: 'ST',
+    name: 'Stripe',
+    fullName: 'Stripe Payment',
+    shortName: 'Stripe',
+    color: '#635bff',
+    textColor: '#ffffff',
+    bgLight: '#eeedff',
+    keywords: ['stripe', 'stripe payments'],
+    iconText: 'S',
+  },
+  WISE: {
+    id: 'WISE',
+    code: 'WISE',
+    name: 'Wise',
+    fullName: 'Wise (TransferWise)',
+    shortName: 'Wise',
+    color: '#9fe870',
+    textColor: '#163300',
+    bgLight: '#f4fbe6',
+    keywords: ['wise', 'transferwise', 'wise payments'],
+    iconText: 'W',
+  },
+  REVOLUT: {
+    id: 'REVOLUT',
+    code: 'REV',
+    name: 'Revolut',
+    fullName: 'Revolut Transfer',
+    shortName: 'Revolut',
+    color: '#0075eb',
+    textColor: '#ffffff',
+    bgLight: '#e6f2fd',
+    keywords: ['revolut', 'revolut bank'],
+    iconText: 'R',
+  },
+  APPLEPAY: {
+    id: 'APPLEPAY',
+    code: 'APL',
+    name: 'Apple Pay',
+    fullName: 'Apple Pay / Apple Cash',
+    shortName: 'Apple Pay',
+    color: '#111827',
+    textColor: '#ffffff',
+    bgLight: '#f3f4f6',
+    keywords: ['apple pay', 'apple cash', 'apple card'],
+    iconText: '🍎',
+  },
+  GOOGLEPAY: {
+    id: 'GOOGLEPAY',
+    code: 'GPY',
+    name: 'Google Pay',
+    fullName: 'Google Pay / Google Wallet',
+    shortName: 'Google Pay',
+    color: '#4285f4',
+    textColor: '#ffffff',
+    bgLight: '#e8f0fe',
+    keywords: ['google pay', 'gpay', 'google wallet'],
+    iconText: 'G',
+  },
+  VENMO: {
+    id: 'VENMO',
+    code: 'VM',
+    name: 'Venmo',
+    fullName: 'Venmo Transfer',
+    shortName: 'Venmo',
+    color: '#008cff',
+    textColor: '#ffffff',
+    bgLight: '#e6f4ff',
+    keywords: ['venmo'],
+    iconText: 'V',
+  },
+  CASHAPP: {
+    id: 'CASHAPP',
+    code: 'CA',
+    name: 'Cash App',
+    fullName: 'Cash App Transfer',
+    shortName: 'Cash App',
+    color: '#00d632',
+    textColor: '#ffffff',
+    bgLight: '#e6fbe8',
+    keywords: ['cash app', 'cashapp', 'square inc'],
+    iconText: '$',
+  },
+  ZELLE: {
+    id: 'ZELLE',
+    code: 'ZL',
+    name: 'Zelle',
+    fullName: 'Zelle Transfer',
+    shortName: 'Zelle',
+    color: '#7414ca',
+    textColor: '#ffffff',
+    bgLight: '#f3e8fc',
+    keywords: ['zelle', 'zellepay'],
+    iconText: 'Z',
+  },
+  CHASE: {
+    id: 'CHASE',
+    code: 'JPMC',
+    name: 'Chase',
+    fullName: 'JPMorgan Chase Bank',
+    shortName: 'Chase',
+    color: '#117aca',
+    textColor: '#ffffff',
+    bgLight: '#e8f2fa',
+    keywords: ['chase', 'jpmorgan', 'jpmorgan chase'],
+    iconText: 'Chase',
+  },
+  BOA: {
+    id: 'BOA',
+    code: 'BOA',
+    name: 'Bank of America',
+    fullName: 'Bank of America',
+    shortName: 'BofA',
+    color: '#e31837',
+    textColor: '#ffffff',
+    bgLight: '#fce8eb',
+    keywords: ['bank of america', 'bofa'],
+    iconText: 'BofA',
+  },
+  WELLS: {
+    id: 'WELLS',
+    code: 'WFC',
+    name: 'Wells Fargo',
+    fullName: 'Wells Fargo Bank',
+    shortName: 'Wells',
+    color: '#cd1409',
+    textColor: '#ffffff',
+    bgLight: '#fde8e8',
+    keywords: ['wells fargo', 'wells'],
+    iconText: 'WF',
+  },
+  CITI: {
+    id: 'CITI',
+    code: 'CITI',
+    name: 'Citibank',
+    fullName: 'Citibank',
+    shortName: 'Citi',
+    color: '#003b70',
+    textColor: '#ffffff',
+    bgLight: '#e6eef5',
+    keywords: ['citibank', 'citi'],
+    iconText: 'Citi',
+  },
+  HSBC: {
+    id: 'HSBC',
+    code: 'HSBC',
+    name: 'HSBC',
+    fullName: 'HSBC Bank',
+    shortName: 'HSBC',
+    color: '#db0011',
+    textColor: '#ffffff',
+    bgLight: '#fde6e8',
+    keywords: ['hsbc', 'hsbc bank'],
+    iconText: 'HSBC',
+  },
+  BARCLAYS: {
+    id: 'BARCLAYS',
+    code: 'BARC',
+    name: 'Barclays',
+    fullName: 'Barclays Bank',
+    shortName: 'Barclays',
+    color: '#00aeef',
+    textColor: '#ffffff',
+    bgLight: '#e6f7fd',
+    keywords: ['barclays'],
+    iconText: 'BARC',
+  },
+  SANTANDER: {
+    id: 'SANTANDER',
+    code: 'SAN',
+    name: 'Santander',
+    fullName: 'Banco Santander',
+    shortName: 'Santander',
+    color: '#ec0000',
+    textColor: '#ffffff',
+    bgLight: '#fde6e6',
+    keywords: ['santander', 'banco santander'],
+    iconText: 'SAN',
+  },
+  BBVA: {
+    id: 'BBVA',
+    code: 'BBVA',
+    name: 'BBVA',
+    fullName: 'Banco Bilbao Vizcaya Argentaria',
+    shortName: 'BBVA',
+    color: '#004481',
+    textColor: '#ffffff',
+    bgLight: '#e6edf2',
+    keywords: ['bbva'],
+    iconText: 'BBVA',
+  },
+  DBS: {
+    id: 'DBS',
+    code: 'DBS',
+    name: 'DBS',
+    fullName: 'DBS Bank / PayLah!',
+    shortName: 'DBS',
+    color: '#ff3333',
+    textColor: '#ffffff',
+    bgLight: '#ffebeb',
+    keywords: ['dbs', 'posb', 'paylah'],
+    iconText: 'DBS',
+  },
+  WECHAT: {
+    id: 'WECHAT',
+    code: 'WXP',
+    name: 'WeChat Pay',
+    fullName: 'WeChat Pay (微信支付)',
+    shortName: 'WeChat',
+    color: '#07c160',
+    textColor: '#ffffff',
+    bgLight: '#e6f9ef',
+    keywords: ['wechat pay', 'wechat', 'weixin', '微信支付'],
+    iconText: 'WX',
+  },
+  ALIPAY: {
+    id: 'ALIPAY',
+    code: 'ALP',
+    name: 'Alipay',
+    fullName: 'Alipay (支付宝)',
+    shortName: 'Alipay',
+    color: '#1677ff',
+    textColor: '#ffffff',
+    bgLight: '#e8f1ff',
+    keywords: ['alipay', '支付宝'],
+    iconText: 'Ali',
+  },
+  LINEPAY: {
+    id: 'LINEPAY',
+    code: 'LP',
+    name: 'LINE Pay',
+    fullName: 'LINE Pay',
+    shortName: 'LINE Pay',
+    color: '#06c755',
+    textColor: '#ffffff',
+    bgLight: '#e6faee',
+    keywords: ['line pay', 'linepay'],
+    iconText: 'LINE',
+  },
+  GLOBAL_RECEIPT: {
+    id: 'GLOBAL_RECEIPT',
+    code: 'REC',
+    name: 'Payment Receipt',
+    fullName: 'Payment Receipt / Transfer',
+    shortName: 'Receipt',
+    color: '#2563eb',
+    textColor: '#ffffff',
+    bgLight: '#eff6ff',
+    keywords: ['receipt', 'invoice', 'payment receipt', 'pos sale', 'transaction record', 'wire transfer', 'tax invoice'],
+    iconText: '🧾',
+  }
+};
+
+export const ALL_BANKS = {
+  ...THAI_BANKS,
+  ...GLOBAL_BANKS
+};
+
+export const BANK_LIST = Object.values(ALL_BANKS);
 
 export function getBankById(id) {
-  return THAI_BANKS[id] || THAI_BANKS.CASH;
+  return ALL_BANKS[id] || THAI_BANKS[id] || THAI_BANKS.CASH;
 }
 
 export function detectBankFromText(text = '') {
   const lower = text.toLowerCase();
+  // Check specific bank keywords
   for (const bank of BANK_LIST) {
-    if (bank.id === 'CASH') continue;
+    if (bank.id === 'CASH' || bank.id === 'OTHER' || bank.id === 'GLOBAL_RECEIPT') continue;
     for (const kw of bank.keywords) {
       if (lower.includes(kw.toLowerCase())) {
         return bank;
       }
     }
   }
-  return THAI_BANKS.KBANK; // Common default if unknown
-}
 
+  // Check if it's a general receipt or invoice
+  for (const kw of GLOBAL_BANKS.GLOBAL_RECEIPT.keywords) {
+    if (lower.includes(kw)) {
+      return GLOBAL_BANKS.GLOBAL_RECEIPT;
+    }
+  }
+
+  // If text contains Thai characters, default to KBANK for compatibility
+  if (/[\u0E00-\u0E7F]/.test(text)) {
+    return THAI_BANKS.KBANK;
+  }
+
+  return GLOBAL_BANKS.GLOBAL_RECEIPT;
+}
